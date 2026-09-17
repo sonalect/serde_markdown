@@ -73,6 +73,7 @@ API changes bump the minor.
 
 ### Changed
 
+- `serde_markdown_derive` uses `syn` 3.0.5.
 - Buf CLI `v1.73.0`; `bazel_utils_*` modules `v0.2.6`.
 - Error contract (DESIGN.md §7 / §12): handwritten `Error` and
   `ErrorKind` like `serde_json` (no `thiserror`, no `anyhow`, no proto

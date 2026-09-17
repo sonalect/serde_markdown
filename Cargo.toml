@@ -27,7 +27,7 @@ serde_json = "=1.0.151"
 serde_markdown = { path = "rust/serde_markdown" }
 serde_markdown_derive = { path = "rust/serde_markdown_derive" }
 serde-markdown-generated = { path = "rust/generated" }
-syn = "=2.0.119"
+syn = "=3.0.5"
 toml = "=1.1.6"
 yaml_serde = "=0.10.7"
 
