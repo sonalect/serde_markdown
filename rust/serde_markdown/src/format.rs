@@ -14,6 +14,8 @@ use crate::error::Error;
 ///
 /// Deserialize still honors an explicit fence tag on input; this enum is the
 /// serialize choice. JSON and TOML are only written when the caller passes them.
+/// A language not compiled into the crate (`yaml` / `json` / `toml` features)
+/// is [`crate::ErrorKind::FormatDisabled`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Format {
     /// YAML (`yaml` / `yml` on input). Default serialize language, labeled `yaml`.

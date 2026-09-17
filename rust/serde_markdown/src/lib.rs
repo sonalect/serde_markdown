@@ -3,14 +3,48 @@
 //!
 //! A root struct's non-body fields map to an optional first YAML, JSON, or
 //! TOML block (fenced or bare). Fields listed in [`Markdown::BODY_FIELDS`]
-//! map to body sections split on top-level `---`.
+//! map to body sections split on top-level `---`. Serialize defaults to a
+//! labeled `yaml` fence; JSON and TOML only when the caller passes
+//! [`Format::Json`] / [`Format::Toml`]. Default crate features are `yaml`,
+//! `json`, `toml`, and `derive`. Feature `buffa` is off by default. A fence
+//! language not in the compiled features is [`ErrorKind::FormatDisabled`].
+//! Documents are UTF-8: [`from_slice`] fails with [`ErrorKind::Syntax`] on
+//! invalid bytes. The mapping document path is [`DESIGN`].
 //!
 //! Google well-known types in the fence or body use that field type's proto3
 //! JSON serde. This crate does not parse RFC 3339 itself. Callers who pack
 //! protobuf `Any` must install a type registry (`buffa_types::register_wkt_types`)
 //! the same way they do for `serde_json`.
+//!
+//! # Example
+//!
+//! ```
+//! # #[cfg(all(feature = "derive", feature = "yaml"))]
+//! # {
+//! use serde::{Deserialize, Serialize};
+//! use serde_markdown::{from_str, to_string, Markdown};
+//!
+//! #[derive(Debug, PartialEq, Serialize, Deserialize, Markdown)]
+//! struct Page {
+//!     title: String,
+//!     #[markdown(body)]
+//!     body: String,
+//! }
+//!
+//! let page = Page {
+//!     title: "Hi".into(),
+//!     body: "Hello".into(),
+//! };
+//! let md = to_string(&page).expect("serialize");
+//! let back: Page = from_str(&md).expect("deserialize");
+//! assert_eq!(page, back);
+//! # }
+//! ```
 
-/// Path of the design document in the repository root.
+/// Path of the mapping document in the repository root (`DESIGN.md`).
+///
+/// That file is the format contract: fields fence, body sections, fence
+/// languages, features, and error kinds.
 pub const DESIGN: &str = "DESIGN.md";
 
 /// Directory containing `markdown/options.proto` for include paths.
@@ -32,11 +66,11 @@ mod markdown;
 mod parse;
 mod ser;
 
-pub use de::from_str;
+pub use de::{from_reader, from_slice, from_str};
 pub use error::{Error, ErrorKind};
 pub use format::{FieldsLayout, Format};
 pub use markdown::Markdown;
-pub use ser::{to_string, to_string_with, to_string_with_format};
+pub use ser::{to_string, to_string_with, to_string_with_format, to_vec, to_writer};
 #[cfg(feature = "derive")]
 pub use serde_markdown_derive::Markdown;
 

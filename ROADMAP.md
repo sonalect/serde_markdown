@@ -67,7 +67,7 @@ not use it yet; wiring is M5.
 | [M9](#m9-nested-structured-names-whitespace) | done | Nested fields, structured body, rename, whitespace |
 | [M10](#m10-wkt) | done | WKT in fence and body via `buffa-types` |
 | [M11](#m11-buffa-annotate) | done | `annotate_markdown_body`; generated messages |
-| [M12](#m12-io-and-features) | not started | `to_vec` / `from_slice` / writer; feature matrix |
+| [M12](#m12-io-and-features) | done | `to_vec` / `from_slice` / writer; feature matrix |
 | [M13](#m13-documents-once) | not started | DESIGN, README, CHANGELOG, this dashboard |
 | [M14](#m14-acceptance) | not started | Golden round-trips; `bazel test //...` |
 
@@ -541,21 +541,21 @@ is the helper and generated-message round-trips.
 
 ## M12. IO and features
 
-**Status:** not started
+**Status:** done
 
 **Codes:** DESIGN.md §5 (`to_vec`, `to_writer`, `from_slice`,
 `from_reader`), §7 `Io` / `FormatDisabled`, §8 UTF-8.
 
 Close only after M11.
 
-- [ ] `to_vec` / `to_writer` / `from_slice` / `from_reader` match
+- [x] `to_vec` / `to_writer` / `from_slice` / `from_reader` match
       `to_string` / `from_str`. `from_slice` fails on invalid UTF-8.
-- [ ] rustdoc on the public surface points at DESIGN.md for the
+- [x] rustdoc on the public surface points at DESIGN.md for the
       mapping; examples use `Page` or a 5-line struct.
-- [ ] Feature matrix: default features include yaml/json/toml as in
+- [x] Feature matrix: default features include yaml/json/toml as in
       DESIGN.md §5.1 (derive/buffa as decided in M4/M11). Disabled
       format still `FormatDisabled`.
-- [ ] `bazel test //...` green. Owner has reviewed the diff.
+- [x] `bazel test //...` green. Owner has reviewed the diff.
 
 **Review:** IO and features. Stop.
 

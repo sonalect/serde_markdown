@@ -1,5 +1,7 @@
 //! Serialize a `Markdown` root struct to a document.
 
+use std::io::Write;
+
 use serde::ser::{Impossible, Serialize, SerializeStruct, Serializer};
 use serde_json::{Map, Value};
 
@@ -18,6 +20,8 @@ use crate::markdown::Markdown;
 /// There is no leading blank line, one newline after the closing fence, a
 /// trailing newline at EOF, and no trailing `---` after the last emitted
 /// section.
+///
+/// [`to_vec`] is these UTF-8 bytes. [`to_writer`] writes the same document.
 pub fn to_string<T: Serialize + Markdown>(value: &T) -> Result<String, Error> {
     to_string_with(value, Format::Yaml, FieldsLayout::Fenced)
 }
@@ -48,6 +52,26 @@ pub fn to_string_with<T: Serialize + Markdown>(
         body_fields: T::BODY_FIELDS,
     })?;
     render(captured, T::BODY_FIELDS, format, layout)
+}
+
+/// Serialize `value` as UTF-8 bytes of a fenced YAML Markdown document.
+///
+/// Same document as [`to_string`].
+pub fn to_vec<T: Serialize + Markdown>(value: &T) -> Result<Vec<u8>, Error> {
+    to_string(value).map(String::into_bytes)
+}
+
+/// Write `value` as a fenced YAML Markdown document to `writer`.
+///
+/// Same document as [`to_string`]. A write failure is [`crate::ErrorKind::Io`]
+/// with `source` set to [`std::io::Error`].
+pub fn to_writer<W, T>(mut writer: W, value: &T) -> Result<(), Error>
+where
+    W: Write,
+    T: Serialize + Markdown,
+{
+    writer.write_all(to_string(value)?.as_bytes())?;
+    Ok(())
 }
 
 struct Captured {
@@ -350,11 +374,13 @@ fn push_with_newline(out: &mut String, text: &str) {
 mod tests {
     use serde::Serialize;
 
-    use super::{to_string, to_string_with, to_string_with_format};
+    use super::{to_string, to_string_with, to_string_with_format, to_vec, to_writer};
     use crate::error::ErrorKind;
     use crate::format::{FieldsLayout, Format};
     use crate::markdown::Markdown;
-    use crate::testdata::{goldens, types, values};
+    #[cfg(feature = "yaml")]
+    use crate::testdata::goldens;
+    use crate::testdata::{types, values};
 
     #[derive(Serialize)]
     struct TupleRoot(i32);
@@ -370,6 +396,7 @@ mod tests {
         const BODY_FIELDS: &'static [&'static str] = &[];
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn page_round_trip() {
         let page = values::page();
@@ -378,6 +405,7 @@ mod tests {
         assert_eq!(page, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn serialize_is_labeled_yaml_fenced() {
         let md = to_string(&values::page()).expect("serialize");
@@ -400,6 +428,7 @@ mod tests {
         assert!(!trimmed.ends_with("---"), "{md}");
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn fields_only_omits_body() {
         let md = to_string(&values::fields_only()).expect("serialize");
@@ -412,6 +441,7 @@ mod tests {
         assert_eq!(values::fields_only(), back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn deserialize_fenced_yaml_golden() {
         let page: types::Page =
@@ -446,6 +476,7 @@ mod tests {
         assert_eq!(values::page(), back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn serialize_bare_yaml_has_no_fence() {
         let md =
@@ -488,6 +519,7 @@ mod tests {
         assert_eq!(values::page(), back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn serialize_bare_fields_only_omits_separator() {
         let md = to_string_with(&values::fields_only(), Format::Yaml, FieldsLayout::Bare)
@@ -500,6 +532,7 @@ mod tests {
         assert_eq!(values::fields_only(), back);
     }
 
+    #[cfg(feature = "yaml")]
     fn assert_optional_round_trip(value: &types::OptionalBody, golden: &str) {
         let from_golden: types::OptionalBody = crate::from_str(golden).expect("golden");
         assert_eq!(*value, from_golden);
@@ -508,6 +541,7 @@ mod tests {
         assert_eq!(*value, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn optional_middle_none_keeps_empty_slot() {
         let value = values::optional_middle_none();
@@ -516,6 +550,7 @@ mod tests {
         assert!(md.contains("```\na\n---\n\n---\nc\n"), "{md}");
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn optional_trailing_none_omits_separator() {
         let value = values::optional_trailing_none();
@@ -527,6 +562,7 @@ mod tests {
         assert!(!trimmed.ends_with("---"), "{md}");
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn optional_leading_none_empty_first_section() {
         let value = values::optional_leading_none();
@@ -535,6 +571,7 @@ mod tests {
         assert!(md.contains("```\n---\na\n"), "{md}");
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn optional_empty_string_writes_quotes() {
         let value = values::optional_empty_string();
@@ -543,6 +580,7 @@ mod tests {
         assert!(md.contains("```\na\n---\n\"\"\n"), "{md}");
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn to_string_stays_fenced_yaml() {
         let md = to_string(&values::page()).expect("serialize");
@@ -580,6 +618,7 @@ mod tests {
         assert_eq!(err.to_string(), "root must be a named struct");
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn nested_round_trip() {
         let value = values::nested();
@@ -593,6 +632,7 @@ mod tests {
         assert_eq!(value, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn structured_body_is_fence_format_dump() {
         let value = values::article();
@@ -619,6 +659,7 @@ mod tests {
         assert_eq!(value, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn serde_rename_keys_in_markdown() {
         let value = values::json_names();
@@ -638,6 +679,7 @@ mod tests {
         assert_eq!(value, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn whitespace_round_trip_keeps_interiors() {
         let value = values::whitespace_page();
@@ -648,6 +690,7 @@ mod tests {
         assert_eq!(value, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn well_known_round_trip() {
         let value = values::well_known();
@@ -683,6 +726,7 @@ mod tests {
         assert_eq!(value, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn well_known_generated_round_trip() {
         let value = values::well_known_generated();
@@ -695,6 +739,7 @@ mod tests {
         assert_eq!(value, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn page_published_round_trip() {
         let value = values::page_with_published();
@@ -708,6 +753,7 @@ mod tests {
         assert_eq!(value, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn page_published_generated_round_trip() {
         let value = values::page_generated_with_published();
@@ -720,6 +766,7 @@ mod tests {
         assert_eq!(value, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn page_generated_round_trip() {
         let value = values::page_generated();
@@ -732,6 +779,7 @@ mod tests {
         assert_eq!(value, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn proto3_page_generated_round_trip() {
         let value = values::proto3_page_generated();
@@ -744,6 +792,7 @@ mod tests {
         assert_eq!(value, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn json_names_generated_round_trip() {
         let value = values::json_names_generated();
@@ -756,6 +805,7 @@ mod tests {
         assert_eq!(value, back);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn optional_body_generated_round_trip() {
         let value = values::optional_middle_none_generated();
@@ -772,6 +822,7 @@ mod tests {
         assert_eq!(trailing, from_trailing);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn article_generated_round_trip() {
         let value = values::article_generated();
@@ -782,5 +833,55 @@ mod tests {
         let back: serde_markdown_generated::markdown::testdata::Article =
             crate::from_str(&md).expect("round-trip");
         assert_eq!(value, back);
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn to_vec_matches_to_string() {
+        let md = to_string(&values::page()).expect("serialize");
+        let bytes = to_vec(&values::page()).expect("to_vec");
+        assert_eq!(bytes, md.as_bytes());
+        let back: types::Page = crate::from_slice(&bytes).expect("from_slice");
+        assert_eq!(values::page(), back);
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn to_writer_matches_to_string() {
+        let md = to_string(&values::page()).expect("serialize");
+        let mut buf = Vec::new();
+        to_writer(&mut buf, &values::page()).expect("to_writer");
+        assert_eq!(buf, md.as_bytes());
+        let back: types::Page = crate::from_reader(buf.as_slice()).expect("from_reader");
+        assert_eq!(values::page(), back);
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn to_writer_io_error_is_io() {
+        struct Boom;
+        impl std::io::Write for Boom {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("boom"))
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let err = to_writer(Boom, &values::page()).expect_err("write");
+        assert_eq!(err.kind(), ErrorKind::Io);
+        assert!(std::error::Error::source(&err).is_some());
+    }
+
+    #[cfg(not(feature = "yaml"))]
+    #[test]
+    fn yaml_without_feature_is_format_disabled() {
+        let err = to_string(&values::page()).expect_err("disabled");
+        assert_eq!(err.kind(), ErrorKind::FormatDisabled);
+        assert!(std::error::Error::source(&err).is_none());
+        let err = to_vec(&values::page()).expect_err("to_vec");
+        assert_eq!(err.kind(), ErrorKind::FormatDisabled);
+        let err = to_writer(std::io::sink(), &values::page()).expect_err("to_writer");
+        assert_eq!(err.kind(), ErrorKind::FormatDisabled);
     }
 }

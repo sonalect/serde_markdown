@@ -12,6 +12,10 @@ rust_clippy_test(
         "//rust/serde_markdown:serde_markdown_test",
         "//rust/serde_markdown:serde_markdown_no_json",
         "//rust/serde_markdown:serde_markdown_no_json_test",
+        "//rust/serde_markdown:serde_markdown_no_toml",
+        "//rust/serde_markdown:serde_markdown_no_toml_test",
+        "//rust/serde_markdown:serde_markdown_no_yaml",
+        "//rust/serde_markdown:serde_markdown_no_yaml_test",
         "//rust/serde_markdown_derive:serde_markdown_derive",
     ],
 )

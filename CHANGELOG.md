@@ -91,6 +91,10 @@ API changes bump the minor.
   Generated testdata messages (Page, Proto3Page, JsonNames, OptionalBody,
   Article, WellKnown) round-trip the matching goldens. Views are not
   `Markdown`.
+- `to_vec` / `to_writer` / `from_slice` / `from_reader` match `to_string` /
+  `from_str`. Invalid UTF-8 on `from_slice` is `Syntax` with a byte offset.
+  Writer and reader failures are `Io`. A fence language not in compiled
+  features remains `FormatDisabled`.
 
 ### Changed
 

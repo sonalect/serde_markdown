@@ -1,5 +1,6 @@
 //! Deserialize a `Markdown` root struct from a document.
 
+use std::io::Read;
 use std::vec;
 
 use serde::de::value::{StrDeserializer, StringDeserializer};
@@ -38,6 +39,9 @@ use crate::parse::{self, Document, Fields, Sniff};
 /// is `Some("")`. Extra sections, a missing required section, and an empty
 /// section for a required structured field are [`ErrorKind::Body`]. A decoder
 /// failure on a structured section is [`ErrorKind::Body`] with `source` set.
+///
+/// [`from_slice`] is the same mapping on UTF-8 bytes. [`from_reader`] reads
+/// a stream to the end, then uses [`from_slice`].
 pub fn from_str<T>(s: &str) -> Result<T, Error>
 where
     T: DeserializeOwned + Markdown,
@@ -57,6 +61,35 @@ where
         slots,
         format: decoded.format,
     })
+}
+
+/// Deserialize a Markdown document from UTF-8 `bytes`.
+///
+/// Same mapping as [`from_str`]. Invalid UTF-8 is [`crate::ErrorKind::Syntax`] with
+/// [`Error::offset`] at the first invalid byte.
+pub fn from_slice<T>(bytes: &[u8]) -> Result<T, Error>
+where
+    T: DeserializeOwned + Markdown,
+{
+    match str::from_utf8(bytes) {
+        Ok(s) => from_str(s),
+        Err(err) => Err(Error::syntax(err.valid_up_to(), "invalid UTF-8")),
+    }
+}
+
+/// Deserialize a Markdown document by reading `reader` to the end.
+///
+/// Same mapping as [`from_str`] after the bytes are collected. A read failure
+/// is [`crate::ErrorKind::Io`] with `source` set to [`std::io::Error`]. Invalid UTF-8
+/// is [`crate::ErrorKind::Syntax`], same as [`from_slice`].
+pub fn from_reader<R, T>(mut reader: R) -> Result<T, Error>
+where
+    R: Read,
+    T: DeserializeOwned + Markdown,
+{
+    let mut bytes = Vec::new();
+    reader.read_to_end(&mut bytes)?;
+    from_slice(&bytes)
 }
 
 struct Decoded {
@@ -496,10 +529,11 @@ impl<'de> MapAccess<'de> for JsonMap {
 
 #[cfg(test)]
 mod tests {
-    use super::{from_str, section_text};
+    use super::{from_reader, from_slice, from_str, section_text};
     use crate::error::ErrorKind;
     use crate::testdata::{goldens, types, values};
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn page_fenced_yaml_golden() {
         let page: types::Page = from_str(goldens::PAGE_FENCED_YAML).expect("yaml");
@@ -520,12 +554,14 @@ mod tests {
         assert_eq!(page, values::page());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn page_fenced_yml_tag() {
         let page: types::Page = from_str(goldens::PAGE_FENCED_YML).expect("yml");
         assert_eq!(page, values::page());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn fields_only_fenced_yaml_golden() {
         let fields: types::FieldsOnly =
@@ -533,6 +569,7 @@ mod tests {
         assert_eq!(fields, values::fields_only());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn page_bare_yaml_golden() {
         let yaml: types::Page = from_str(goldens::PAGE_BARE_YAML).expect("bare yaml");
@@ -553,6 +590,7 @@ mod tests {
         assert_eq!(toml, values::page());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn page_unlabeled_yaml_sniffs() {
         let yaml: types::Page = from_str(goldens::PAGE_UNLABELED_YAML).expect("unlabeled yaml");
@@ -603,18 +641,21 @@ mod tests {
         assert!(std::error::Error::source(&err).is_some());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn leading_prefix_is_ignored() {
         let page: types::Page = from_str(goldens::PAGE_LEADING_PREFIX).expect("prefix");
         assert_eq!(page, values::page());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn body_only_two_sections_golden() {
         let body: types::BodyOnly = from_str(goldens::BODY_ONLY_TWO_SECTIONS).expect("body-only");
         assert_eq!(body, values::body_only());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn fence_not_first_is_body_not_fields() {
         let err = from_str::<types::Page>(goldens::PAGE_FENCE_NOT_FIRST).expect_err("not fields");
@@ -624,6 +665,7 @@ mod tests {
         assert_eq!(err.kind(), ErrorKind::Body);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn page_split_goldens_are_one_first_section_plus_appendix() {
         let fence: types::Page = from_str(goldens::PAGE_SPLIT_FENCE).expect("split fence");
@@ -672,6 +714,7 @@ mod tests {
         assert!(std::error::Error::source(&err).is_none());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn optional_middle_none_golden() {
         let got: types::OptionalBody =
@@ -679,6 +722,7 @@ mod tests {
         assert_eq!(got, values::optional_middle_none());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn optional_trailing_none_golden() {
         let got: types::OptionalBody =
@@ -686,6 +730,7 @@ mod tests {
         assert_eq!(got, values::optional_trailing_none());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn optional_leading_none_golden() {
         let got: types::OptionalBody =
@@ -693,6 +738,7 @@ mod tests {
         assert_eq!(got, values::optional_leading_none());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn optional_empty_string_golden() {
         let got: types::OptionalBody =
@@ -700,6 +746,7 @@ mod tests {
         assert_eq!(got, values::optional_empty_string());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn extra_optional_body_section_is_body() {
         let input = concat!(
@@ -718,6 +765,7 @@ mod tests {
         assert_eq!(err.kind(), ErrorKind::Body);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn empty_section_for_required_structured_is_body() {
         let input = "```yaml\ntitle: t\n```\n---\n";
@@ -726,6 +774,7 @@ mod tests {
         assert!(std::error::Error::source(&err).is_none());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn structured_decoder_failure_is_body_with_source() {
         let input = "```yaml\ntitle: Hello\n```\n:\n";
@@ -734,24 +783,28 @@ mod tests {
         assert!(std::error::Error::source(&err).is_some());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn nested_fenced_yaml_golden() {
         let got: types::NestedFields = from_str(goldens::NESTED_FENCED_YAML).expect("nested");
         assert_eq!(got, values::nested());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn structured_fenced_yaml_golden() {
         let got: types::Article = from_str(goldens::STRUCTURED_FENCED_YAML).expect("structured");
         assert_eq!(got, values::article());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn names_fenced_yaml_golden() {
         let got: types::JsonNames = from_str(goldens::NAMES_FENCED_YAML).expect("names");
         assert_eq!(got, values::json_names());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn whitespace_unicode_golden_keeps_interiors() {
         let got: types::Page = from_str(goldens::WHITESPACE_UNICODE).expect("whitespace");
@@ -761,12 +814,14 @@ mod tests {
         assert!(got.text1.contains("Ещё"), "{:?}", got.text1);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn well_known_fenced_yaml_golden() {
         let got: types::WellKnown = from_str(goldens::WELL_KNOWN_FENCED_YAML).expect("well_known");
         assert_eq!(got, values::well_known());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn well_known_generated_deserializes_golden() {
         let got: serde_markdown_generated::markdown::testdata::WellKnown =
@@ -774,6 +829,7 @@ mod tests {
         assert_eq!(got, values::well_known_generated());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn page_published_yaml_golden() {
         let got: types::Page = from_str(goldens::PAGE_PUBLISHED_YAML).expect("published");
@@ -781,6 +837,7 @@ mod tests {
         assert!(got.published.is_some());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn page_published_generated_deserializes_golden() {
         let got: serde_markdown_generated::markdown::testdata::Page =
@@ -789,6 +846,7 @@ mod tests {
         assert!(got.published.is_set());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn page_generated_deserializes_golden() {
         let got: serde_markdown_generated::markdown::testdata::Page =
@@ -796,6 +854,7 @@ mod tests {
         assert_eq!(got, values::page_generated());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn proto3_page_generated_deserializes_golden() {
         let got: serde_markdown_generated::markdown::testdata::Proto3Page =
@@ -804,6 +863,7 @@ mod tests {
         assert!(got.body.is_some());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn json_names_generated_deserializes_golden() {
         let got: serde_markdown_generated::markdown::testdata::JsonNames =
@@ -811,6 +871,7 @@ mod tests {
         assert_eq!(got, values::json_names_generated());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn optional_body_generated_deserializes_golden() {
         let middle: serde_markdown_generated::markdown::testdata::OptionalBody =
@@ -821,6 +882,7 @@ mod tests {
         assert_eq!(trailing, values::optional_trailing_none_generated());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn article_generated_deserializes_golden() {
         let got: serde_markdown_generated::markdown::testdata::Article =
@@ -828,6 +890,7 @@ mod tests {
         assert_eq!(got, values::article_generated());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn extra_body_section_is_body() {
         let input = concat!(
@@ -846,6 +909,7 @@ mod tests {
         assert_eq!(err.kind(), ErrorKind::Body);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn missing_body_section_is_body() {
         let input = concat!(
@@ -860,6 +924,7 @@ mod tests {
         assert_eq!(err.kind(), ErrorKind::Body);
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn invalid_fields_yaml_is_front_matter() {
         let input = "```yaml\n:\n```\n";
@@ -873,5 +938,54 @@ mod tests {
         assert_eq!(section_text("hello   \n"), "hello   ");
         assert_eq!(section_text("hello"), "hello");
         assert_eq!(section_text("a\n\nb\n"), "a\n\nb");
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn from_slice_matches_from_str() {
+        let from_str: types::Page = from_str(goldens::PAGE_FENCED_YAML).expect("from_str");
+        let from_slice: types::Page =
+            from_slice(goldens::PAGE_FENCED_YAML.as_bytes()).expect("from_slice");
+        assert_eq!(from_str, from_slice);
+        assert_eq!(from_slice, values::page());
+    }
+
+    #[test]
+    fn from_slice_invalid_utf8_is_syntax() {
+        let err = from_slice::<types::FieldsOnly>(&[0xff, b'a']).expect_err("utf8");
+        assert_eq!(err.kind(), ErrorKind::Syntax);
+        assert_eq!(err.offset(), Some(0));
+        assert!(std::error::Error::source(&err).is_none());
+        assert!(err.to_string().contains("invalid UTF-8"), "{err}");
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn from_reader_matches_from_str() {
+        let from_str: types::Page = from_str(goldens::PAGE_FENCED_YAML).expect("from_str");
+        let from_reader: types::Page =
+            from_reader(goldens::PAGE_FENCED_YAML.as_bytes()).expect("from_reader");
+        assert_eq!(from_str, from_reader);
+        assert_eq!(from_reader, values::page());
+    }
+
+    #[test]
+    fn from_reader_io_error_is_io() {
+        struct Boom;
+        impl std::io::Read for Boom {
+            fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::other("boom"))
+            }
+        }
+        let err = from_reader::<_, types::FieldsOnly>(Boom).expect_err("read");
+        assert_eq!(err.kind(), ErrorKind::Io);
+        assert!(std::error::Error::source(&err).is_some());
+    }
+
+    #[test]
+    fn from_reader_invalid_utf8_is_syntax() {
+        let err = from_reader::<_, types::FieldsOnly>([0xff, b'a'].as_slice()).expect_err("utf8");
+        assert_eq!(err.kind(), ErrorKind::Syntax);
+        assert_eq!(err.offset(), Some(0));
     }
 }
