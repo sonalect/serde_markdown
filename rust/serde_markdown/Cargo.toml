@@ -15,6 +15,7 @@ yaml = ["dep:yaml_serde"]
 json = []
 toml = ["dep:toml"]
 derive = ["dep:serde_markdown_derive"]
+buffa = ["dep:buffa", "dep:buffa-types", "dep:buffa-descriptor"]
 
 [dependencies]
 pulldown-cmark = { workspace = true }
@@ -23,10 +24,14 @@ serde_json = { workspace = true }
 serde_markdown_derive = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
 yaml_serde = { workspace = true, optional = true }
+buffa = { workspace = true, optional = true }
+buffa-types = { workspace = true, optional = true }
+buffa-descriptor = { workspace = true, optional = true }
 
 [dev-dependencies]
 buffa = { workspace = true }
 buffa-types = { workspace = true }
+buffa-descriptor = { workspace = true }
 serde-markdown-generated = { workspace = true }
 
 [lints]

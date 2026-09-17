@@ -66,7 +66,7 @@ not use it yet; wiring is M5.
 | [M8](#m8-option-and-presence) | done | Trailing vs middle `None`; `Some("")` |
 | [M9](#m9-nested-structured-names-whitespace) | done | Nested fields, structured body, rename, whitespace |
 | [M10](#m10-wkt) | done | WKT in fence and body via `buffa-types` |
-| [M11](#m11-buffa-annotate) | not started | `annotate_markdown_body`; generated messages |
+| [M11](#m11-buffa-annotate) | done | `annotate_markdown_body`; generated messages |
 | [M12](#m12-io-and-features) | not started | `to_vec` / `from_slice` / writer; feature matrix |
 | [M13](#m13-documents-once) | not started | DESIGN, README, CHANGELOG, this dashboard |
 | [M14](#m14-acceptance) | not started | Golden round-trips; `bazel test //...` |
@@ -172,12 +172,19 @@ message Page {
 
 ```rust
 // build.rs — M11
-buffa_build::Config::new()
+let fds = /* FileDescriptorSet from buf/protoc */;
+let attrs = serde_markdown::buffa::annotate_markdown_body(&fds);
+let mut config = buffa_build::Config::new()
     .files(&["proto/page.proto"])
     .includes(&["proto/", serde_markdown::PROTO_INCLUDE])
-    .generate_json(true)
-    .apply(serde_markdown::buffa::annotate_markdown_body)
-    .compile()?;
+    .generate_json(true);
+for (path, attr) in attrs.message_attributes() {
+    config = config.message_attribute(path, attr);
+}
+for (path, attr) in attrs.field_attributes() {
+    config = config.field_attribute(path, attr);
+}
+config.compile()?;
 
 // after generate
 use serde_markdown::{from_str, to_string};
@@ -508,25 +515,25 @@ impl is still manual. Generated `Markdown` impl is M11.
 
 ## M11. Buffa annotate
 
-**Status:** not started
+**Status:** done
 
 **Codes:** DESIGN.md §3.2 (buffa integration).
 
 Close only after M10. `options.proto` already exists (M1). This stage
 is the helper and generated-message round-trips.
 
-- [ ] Feature `buffa`: `annotate_markdown_body` walks a
+- [x] Feature `buffa`: `annotate_markdown_body` walks a
       `FileDescriptorSet`, finds `(markdown.body) = true`, injects
       `#[derive(Markdown)]` / `#[markdown(body)]` via buffa
       `message_attribute` / `field_attribute`. No fork of
       `buffa-codegen`.
-- [ ] `BODY_FIELDS` on generated types uses proto3 JSON names
+- [x] `BODY_FIELDS` on generated types uses proto3 JSON names
       (`occurredAt`, `bodyNote`).
-- [ ] Generated `Page`, `Proto3Page`, `JsonNames`, `OptionalBody`,
+- [x] Generated `Page`, `Proto3Page`, `JsonNames`, `OptionalBody`,
       `Article`, `WellKnown` round-trip the matching goldens
       (`from_str` / `to_string`). proto3 `optional` body works.
-- [ ] Views (`PageView`) are not `Markdown` (DESIGN.md §10).
-- [ ] `bazel test //...` green. Owner has reviewed the diff.
+- [x] Views (`PageView`) are not `Markdown` (DESIGN.md §10).
+- [x] `bazel test //...` green. Owner has reviewed the diff.
 
 **Review:** generated messages. Stop.
 
@@ -601,13 +608,6 @@ Close only after M13.
 - Crate version number for a crates.io release (CHANGELOG / 0.x rules
   at publish).
 - Exact `Error` `Display` wording. M3 picks strings and rustdoc.
-- Whether the default feature set includes `derive` and `buffa` on day
-  one. DESIGN.md §5.1 lists them; M4 and M11 may ship them off-default
-  if Bazel CI still links them. Record the choice in DESIGN.md if it
-  differs.
-- Whether `annotate_markdown_body` is public in v1 or
-  `#[doc(hidden)]` until a consumer build.rs exists. M11 picks and
-  rustdocs.
 
 ---
 

@@ -390,15 +390,26 @@ Helper:
 
 ```rust
 // build.rs
-buffa_build::Config::new()
+// `buffa_build::Config` has no `apply` hook that receives the compiled
+// FileDescriptorSet, so the helper walks a set the caller already has
+// (from `buf build --as-file-descriptor-set` or `protoc --descriptor_set_out`)
+// and returns `message_attribute` / `field_attribute` pairs.
+let fds = /* FileDescriptorSet */;
+let attrs = serde_markdown::buffa::annotate_markdown_body(&fds);
+let mut config = buffa_build::Config::new()
     .files(&["proto/page.proto"])
     .includes(&["proto/", serde_markdown::PROTO_INCLUDE])
-    .generate_json(true)
-    .apply(serde_markdown::buffa::annotate_markdown_body)
-    .compile()?;
+    .generate_json(true);
+for (path, attr) in attrs.message_attributes() {
+    config = config.message_attribute(path, attr);
+}
+for (path, attr) in attrs.field_attributes() {
+    config = config.field_attribute(path, attr);
+}
+config.compile()?;
 ```
 
-`annotate_markdown_body` walks the `FileDescriptorSet`, finds fields with `(markdown.body) = true`, and injects the attributes. No fork of `buffa-codegen`.
+`annotate_markdown_body` walks the `FileDescriptorSet`, finds fields with `(markdown.body) = true`, and returns the attributes. The caller injects them with buffa `message_attribute` / `field_attribute`. No fork of `buffa-codegen`. The helper is public. Feature `buffa` is off-default; Bazel still enables it for CI.
 
 v1 targets **owned** generated messages. `PageView<'a>` is a non-goal until owned round-trips are solid (views already `Serialize` with `json`, so a later pass can allow `to_string` on views).
 
@@ -573,6 +584,8 @@ toml = ["dep:toml"]
 derive = ["dep:serde_markdown_derive"]
 buffa = ["dep:buffa", "dep:buffa-types", "dep:buffa-descriptor"]
 ```
+
+Feature `buffa` is **off-default**. Bazel CI still enables it. `annotate_markdown_body` is public (not `doc(hidden)`).
 
 YAML crate: **`yaml_serde` 0.10** (YAML Organization fork of `serde_yaml`). Not `serde_yaml` (archived), not `serde_yml` (unmaintained / RUSTSEC).
 

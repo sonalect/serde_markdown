@@ -10,6 +10,7 @@ rust_library(
         allow_empty = True,
     ),
     crate_features = [
+        "buffa",
         "derive",
         "json",
         "toml",
@@ -21,6 +22,9 @@ rust_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        "@cargo//:buffa",
+        "@cargo//:buffa-descriptor",
+        "@cargo//:buffa-types",
         "@cargo//:pulldown-cmark",
         "@cargo//:serde",
         "@cargo//:serde_json",
@@ -37,6 +41,7 @@ rust_test(
     ),
     crate = ":serde_markdown",
     crate_features = [
+        "buffa",
         "derive",
         "json",
         "toml",
@@ -49,6 +54,7 @@ rust_test(
     deps = [
         "//rust/generated",
         "@cargo//:buffa",
+        "@cargo//:buffa-descriptor",
         "@cargo//:buffa-types",
         "@cargo//:serde_json",
     ],

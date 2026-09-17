@@ -790,6 +790,45 @@ mod tests {
     }
 
     #[test]
+    fn page_generated_deserializes_golden() {
+        let got: serde_markdown_generated::markdown::testdata::Page =
+            from_str(goldens::PAGE_FENCED_YAML).expect("generated page");
+        assert_eq!(got, values::page_generated());
+    }
+
+    #[test]
+    fn proto3_page_generated_deserializes_golden() {
+        let got: serde_markdown_generated::markdown::testdata::Proto3Page =
+            from_str(goldens::PROTO3_FENCED_YAML).expect("generated proto3");
+        assert_eq!(got, values::proto3_page_generated());
+        assert!(got.body.is_some());
+    }
+
+    #[test]
+    fn json_names_generated_deserializes_golden() {
+        let got: serde_markdown_generated::markdown::testdata::JsonNames =
+            from_str(goldens::NAMES_FENCED_YAML).expect("generated names");
+        assert_eq!(got, values::json_names_generated());
+    }
+
+    #[test]
+    fn optional_body_generated_deserializes_golden() {
+        let middle: serde_markdown_generated::markdown::testdata::OptionalBody =
+            from_str(goldens::OPTIONAL_MIDDLE_NONE).expect("generated middle none");
+        assert_eq!(middle, values::optional_middle_none_generated());
+        let trailing: serde_markdown_generated::markdown::testdata::OptionalBody =
+            from_str(goldens::OPTIONAL_TRAILING_NONE).expect("generated trailing none");
+        assert_eq!(trailing, values::optional_trailing_none_generated());
+    }
+
+    #[test]
+    fn article_generated_deserializes_golden() {
+        let got: serde_markdown_generated::markdown::testdata::Article =
+            from_str(goldens::STRUCTURED_FENCED_YAML).expect("generated article");
+        assert_eq!(got, values::article_generated());
+    }
+
+    #[test]
     fn extra_body_section_is_body() {
         let input = concat!(
             "```yaml\n",

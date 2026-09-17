@@ -84,6 +84,13 @@ API changes bump the minor.
   `Int32Value`). Body `Timestamp` / `Duration` are the raw RFC 3339 / `1.5s`
   form. Callers who need protobuf `Any` install a type registry
   (`buffa_types::register_wkt_types`); this crate does not.
+- Feature `buffa` (off-default; Bazel enables it): `annotate_markdown_body`
+  walks a `FileDescriptorSet` for `(markdown.body) = true` and returns buffa
+  `message_attribute` / `field_attribute` pairs (`#[derive(Markdown)]` /
+  `#[markdown(body)]`). Public `PROTO_INCLUDE` for `markdown/options.proto`.
+  Generated testdata messages (Page, Proto3Page, JsonNames, OptionalBody,
+  Article, WellKnown) round-trip the matching goldens. Views are not
+  `Markdown`.
 
 ### Changed
 

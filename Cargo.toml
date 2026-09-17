@@ -19,6 +19,9 @@ buffa-types = { version = "=0.9.2", default-features = false, features = [
     "json",
     "std",
 ] }
+buffa-descriptor = { version = "=0.9.2", default-features = false, features = [
+    "std",
+] }
 proc-macro2 = "=1.0.107"
 pulldown-cmark = "=0.13.4"
 quote = "=1.0.47"

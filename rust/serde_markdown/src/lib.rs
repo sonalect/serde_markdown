@@ -13,6 +13,15 @@
 /// Path of the design document in the repository root.
 pub const DESIGN: &str = "DESIGN.md";
 
+/// Directory containing `markdown/options.proto` for include paths.
+///
+/// Pass this to buffa or protoc includes so `import "markdown/options.proto"`
+/// resolves.
+pub const PROTO_INCLUDE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../proto");
+
+#[cfg(feature = "buffa")]
+pub mod buffa;
+
 #[cfg(test)]
 extern crate self as serde_markdown;
 
@@ -48,6 +57,8 @@ mod testdata_smoke {
 
     #[test]
     fn body_field_lists_match_design() {
+        use serde_markdown_generated::markdown::testdata as generated;
+
         assert_eq!(types::Page::BODY_FIELDS, ["text1", "appendix"]);
         assert_eq!(types::FieldsOnly::BODY_FIELDS, [] as [&str; 0]);
         assert_eq!(types::BodyOnly::BODY_FIELDS, ["text1", "text2"]);
@@ -68,15 +79,26 @@ mod testdata_smoke {
         );
         assert_eq!(types::Article::BODY_FIELDS, ["note"]);
         assert_eq!(types::WellKnown::BODY_FIELDS, ["occurredAt", "pause"]);
-        assert_eq!(
-            serde_markdown_generated::markdown::testdata::WellKnown::BODY_FIELDS,
-            ["occurredAt", "pause"]
-        );
-        assert_eq!(
-            serde_markdown_generated::markdown::testdata::Page::BODY_FIELDS,
-            ["text1", "appendix"]
-        );
         assert_eq!(types::Proto3Page::BODY_FIELDS, ["body"]);
+
+        assert_eq!(generated::Page::BODY_FIELDS, ["text1", "appendix"]);
+        assert_eq!(generated::WellKnown::BODY_FIELDS, ["occurredAt", "pause"]);
+        assert_eq!(generated::JsonNames::BODY_FIELDS, ["bodyNote"]);
+        assert!(
+            !generated::JsonNames::BODY_FIELDS.contains(&"body_note"),
+            "generated BODY_FIELDS must use the Serde name after rename"
+        );
+        assert!(
+            !generated::JsonNames::BODY_FIELDS.contains(&"published_at")
+                && !generated::JsonNames::BODY_FIELDS.contains(&"publishedAt"),
+            "generated front-matter rename must not appear in BODY_FIELDS"
+        );
+        assert_eq!(
+            generated::OptionalBody::BODY_FIELDS,
+            ["first", "middle", "last"]
+        );
+        assert_eq!(generated::Article::BODY_FIELDS, ["note"]);
+        assert_eq!(generated::Proto3Page::BODY_FIELDS, ["body"]);
     }
 
     #[test]
