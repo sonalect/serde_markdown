@@ -1,0 +1,24 @@
+// Google well-known types in the fields block and as body sections.
+
+edition = "2024";
+
+package markdown.testdata;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
+import "markdown/options.proto";
+
+message WellKnown {
+  google.protobuf.Timestamp published = 1;
+  google.protobuf.Duration ttl = 2;
+  google.protobuf.Empty meta = 3;
+  google.protobuf.Struct extra = 4;
+  google.protobuf.FieldMask mask = 5;
+  google.protobuf.Int32Value count = 6;
+  google.protobuf.Timestamp occurred_at = 7 [(markdown.body) = true];
+  google.protobuf.Duration pause = 8 [(markdown.body) = true];
+}

@@ -1,0 +1,13 @@
+// Proto identifiers are snake_case; buffa proto3 JSON names are camelCase.
+// BODY_FIELDS and Markdown keys must use publishedAt / bodyNote.
+
+edition = "2024";
+
+package markdown.testdata;
+
+import "markdown/options.proto";
+
+message JsonNames {
+  string published_at = 1;
+  string body_note = 2 [(markdown.body) = true];
+}

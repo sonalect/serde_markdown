@@ -1,0 +1,29 @@
+load("@rules_rust//rust:defs.bzl", "rust_library", "rust_test")
+
+exports_files([
+    "Cargo.toml",
+    # Destination for //proto/markdown:generate → rust/generated/markdown.
+    "markdown",
+])
+
+rust_library(
+    name = "generated",
+    srcs = ["lib.rs"] + glob(
+        ["markdown/**/*.rs"],
+        allow_empty = True,
+    ),
+    crate_name = "serde_markdown_generated",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@cargo//:buffa",
+        "@cargo//:buffa-types",
+        "@cargo//:serde",
+        "@cargo//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "generated_test",
+    crate = ":generated",
+    visibility = ["//rust:__pkg__"],
+)

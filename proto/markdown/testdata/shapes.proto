@@ -1,0 +1,31 @@
+// Document shapes: fields-only, body-only, and nested front matter.
+
+edition = "2024";
+
+package markdown.testdata;
+
+import "markdown/options.proto";
+
+// No body fields: serialize is a fields block (or empty file if all unset).
+message FieldsOnly {
+  string name = 1;
+  int32 count = 2;
+}
+
+// Every field is body: serialize is body-only (no fields fence).
+message BodyOnly {
+  string text1 = 1 [(markdown.body) = true];
+  string text2 = 2 [(markdown.body) = true];
+}
+
+// Nested message, repeated strings, and a bool stay in the fields block.
+message NestedFields {
+  message Meta {
+    string author = 1;
+    repeated string tags = 2;
+  }
+
+  Meta meta = 1;
+  bool draft = 2;
+  string body = 3 [(markdown.body) = true];
+}

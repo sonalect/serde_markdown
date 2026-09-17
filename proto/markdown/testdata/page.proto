@@ -1,0 +1,18 @@
+// Canonical DESIGN.md example: mixed front matter + two body strings + WKT
+// in the fields block. Not part of the public markdown proto API.
+
+edition = "2024";
+
+package markdown.testdata;
+
+import "google/protobuf/timestamp.proto";
+import "markdown/options.proto";
+
+message Page {
+  string field1 = 1;
+  string field2 = 2;
+  int32 field3 = 3;
+  string text1 = 4 [(markdown.body) = true];
+  google.protobuf.Timestamp published = 5;
+  string appendix = 6 [(markdown.body) = true];
+}

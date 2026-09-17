@@ -1,0 +1,30 @@
+[package]
+name = "serde_markdown"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Serde format crate: Rust structs to and from Markdown documents"
+readme = "../../README.md"
+
+[features]
+default = ["yaml", "json", "toml"]
+yaml = ["dep:yaml_serde"]
+json = ["dep:serde_json"]
+toml = ["dep:toml"]
+
+[dependencies]
+pulldown-cmark = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+yaml_serde = { workspace = true, optional = true }
+
+[dev-dependencies]
+buffa = { workspace = true }
+buffa-types = { workspace = true }
+serde-markdown-generated = { workspace = true }
+
+[lints]
+workspace = true

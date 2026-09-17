@@ -1,0 +1,16 @@
+# Workspace buf config. Generate/lint copy this file; BSR deps stay remote.
+# Module root is `proto/`, so imports are `markdown/options.proto`.
+version: v2
+modules:
+  - path: proto
+deps:
+  - buf.build/protocolbuffers/wellknowntypes:v36.1
+lint:
+  use:
+    - STANDARD
+  except:
+    # Public option package is `markdown`, not `markdown.v1`.
+    - PACKAGE_VERSION_SUFFIX
+breaking:
+  use:
+    - FILE

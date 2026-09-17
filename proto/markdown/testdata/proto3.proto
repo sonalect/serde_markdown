@@ -1,0 +1,12 @@
+// proto3 syntax coverage: `optional` body field (explicit presence).
+
+syntax = "proto3";
+
+package markdown.testdata;
+
+import "markdown/options.proto";
+
+message Proto3Page {
+  string title = 1;
+  optional string body = 2 [(markdown.body) = true];
+}

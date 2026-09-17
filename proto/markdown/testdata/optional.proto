@@ -1,0 +1,15 @@
+// Option / proto presence matrix for body sections (DESIGN.md §4.4).
+// Edition 2024 uses explicit presence, so unset body fields are None.
+
+edition = "2024";
+
+package markdown.testdata;
+
+import "markdown/options.proto";
+
+message OptionalBody {
+  string title = 1;
+  string first = 2 [(markdown.body) = true];
+  string middle = 3 [(markdown.body) = true];
+  string last = 4 [(markdown.body) = true];
+}

@@ -1,0 +1,20 @@
+// Field option that marks a protobuf field as a Markdown body section
+// for serde_markdown. Import this file from proto3, Edition 2023, or
+// Edition 2024:
+//
+//   string text = 4 [(markdown.body) = true];
+//
+// This file is proto3 so toolchains without editions can still compile it.
+// A FeatureSet feature named `markdown.body` cannot coexist with this
+// option: both would be the identifier `markdown.body` in package
+// `markdown`.
+
+syntax = "proto3";
+
+package markdown;
+
+import "google/protobuf/descriptor.proto";
+
+extend google.protobuf.FieldOptions {
+  bool body = 20260917;
+}

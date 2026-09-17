@@ -1,0 +1,17 @@
+// Structured (non-string) body field: the section is YAML/JSON/TOML of Note.
+
+edition = "2024";
+
+package markdown.testdata;
+
+import "markdown/options.proto";
+
+message Note {
+  string heading = 1;
+  int32 pages = 2;
+}
+
+message Article {
+  string title = 1;
+  Note note = 2 [(markdown.body) = true];
+}
