@@ -8,6 +8,7 @@ messages) as Markdown documents. Design: [DESIGN.md](DESIGN.md).
 | Path | Role |
 | --- | --- |
 | [`DESIGN.md`](DESIGN.md) | Format, mapping, proto options, Bazel |
+| [`ROADMAP.md`](ROADMAP.md) | Work order: parse, ser/de, derive, buffa (M0–M14) |
 | [`CHANGELOG.md`](CHANGELOG.md) | Notable changes |
 | [`proto/markdown`](proto/markdown) | Public `(markdown.body)` option |
 | [`proto/markdown/testdata`](proto/markdown/testdata) | Fixture messages (not public API) |

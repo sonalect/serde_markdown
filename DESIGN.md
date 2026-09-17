@@ -550,6 +550,8 @@ pub trait Markdown {
 ### 5.1 Crate layout and features
 
 ```text
+DESIGN.md                                 # format mapping (normative)
+ROADMAP.md                                # implementation stages M0–M14
 proto/markdown/options.proto              # public (markdown.body) option
 proto/markdown/testdata/*.proto           # fixture messages (buffa generate)
 rust/generated/                           # bazel run //proto/markdown:generate
@@ -724,14 +726,17 @@ Syntax errors include byte offset (from pulldown-cmark / fence scan).
 
 ## 11. Implementation order
 
+Stage checklist: [ROADMAP.md](ROADMAP.md)
+(M0–M14). Do not treat this section as a second tracker.
+
+Order those stages implement:
+
 1. `parse.rs` + CommonMark split tests (fences, unlabeled sniff, leading `---`, nested `---`, `***`, lists).
 2. `Error`, `Format`, `Markdown` trait, derive crate.
-3. `ser` / `de` for hand-written structs, YAML default.
-4. JSON + TOML features.
-5. `Option` / empty / trailing-absent rules.
-6. WKT tests via `buffa-types`.
-7. `options.proto` + Bazel/Buf generate (`//proto/markdown:generate`) + `buffa::annotate_markdown_body`.
-8. Docs and fixtures.
+3. `ser` / `de` for hand-written structs, YAML default; then JSON + TOML; then `Option`.
+4. Nested / structured / rename / whitespace; WKT via `buffa-types`.
+5. `buffa::annotate_markdown_body` (options.proto already in tree).
+6. IO helpers, feature matrix, docs, acceptance goldens.
 
 ## 12. Resolved decisions
 
