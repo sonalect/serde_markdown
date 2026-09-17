@@ -53,3 +53,54 @@ rust_test(
         "@cargo//:serde_json",
     ],
 )
+
+# Same sources without the `json` fence feature so FormatDisabled is covered.
+rust_library(
+    name = "serde_markdown_no_json",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = glob(
+        ["testdata/markdown/**/*.md"],
+        allow_empty = True,
+    ),
+    crate_features = [
+        "derive",
+        "toml",
+        "yaml",
+    ],
+    crate_name = "serde_markdown",
+    proc_macro_deps = [
+        "//rust/serde_markdown_derive",
+    ],
+    visibility = ["//rust:__pkg__"],
+    deps = [
+        "@cargo//:pulldown-cmark",
+        "@cargo//:serde",
+        "@cargo//:serde_json",
+        "@cargo//:toml",
+        "@cargo//:yaml_serde",
+    ],
+)
+
+rust_test(
+    name = "serde_markdown_no_json_test",
+    compile_data = glob(
+        ["testdata/markdown/**/*.md"],
+        allow_empty = True,
+    ),
+    crate = ":serde_markdown_no_json",
+    crate_features = [
+        "derive",
+        "toml",
+        "yaml",
+    ],
+    proc_macro_deps = [
+        "//rust/serde_markdown_derive",
+    ],
+    visibility = ["//rust:__pkg__"],
+    deps = [
+        "//rust/generated",
+        "@cargo//:buffa",
+        "@cargo//:buffa-types",
+        "@cargo//:serde_json",
+    ],
+)

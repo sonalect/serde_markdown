@@ -48,12 +48,8 @@ impl fmt::Display for Format {
 pub(crate) fn dump(value: &Value, format: Format) -> Result<String, Error> {
     match format {
         Format::Yaml => dump_yaml(value),
-        Format::Json | Format::Toml => {
-            let _ = value;
-            Err(Error::type_error(
-                "only fenced YAML serialize is implemented",
-            ))
-        }
+        Format::Json => dump_json(value),
+        Format::Toml => dump_toml(value),
     }
 }
 
@@ -75,6 +71,30 @@ fn dump_yaml(value: &Value) -> Result<String, Error> {
     {
         let _ = value;
         Err(Error::format_disabled(Format::Yaml))
+    }
+}
+
+fn dump_json(value: &Value) -> Result<String, Error> {
+    #[cfg(feature = "json")]
+    {
+        serde_json::to_string_pretty(value).map_err(Error::type_error)
+    }
+    #[cfg(not(feature = "json"))]
+    {
+        let _ = value;
+        Err(Error::format_disabled(Format::Json))
+    }
+}
+
+fn dump_toml(value: &Value) -> Result<String, Error> {
+    #[cfg(feature = "toml")]
+    {
+        toml::to_string_pretty(value).map_err(Error::type_error)
+    }
+    #[cfg(not(feature = "toml"))]
+    {
+        let _ = value;
+        Err(Error::format_disabled(Format::Toml))
     }
 }
 

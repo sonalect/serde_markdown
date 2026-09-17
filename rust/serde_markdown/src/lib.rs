@@ -22,7 +22,7 @@ pub use de::from_str;
 pub use error::{Error, ErrorKind};
 pub use format::{FieldsLayout, Format};
 pub use markdown::Markdown;
-pub use ser::to_string;
+pub use ser::{to_string, to_string_with, to_string_with_format};
 #[cfg(feature = "derive")]
 pub use serde_markdown_derive::Markdown;
 

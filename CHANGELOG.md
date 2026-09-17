@@ -56,6 +56,11 @@ API changes bump the minor.
   labeled `yaml` fence plus raw `String` body sections (`yml` is accepted
   on input). Fields-only documents omit the body. Serialize need not be
   byte-identical to a golden; `from_str(to_string(x)) == x` holds.
+- `to_string_with_format` writes a labeled `json` or `toml` fence (pretty
+  JSON with 2-space indent; `toml::to_string_pretty`). `to_string_with`
+  plus `FieldsLayout::Bare` writes unfenced fields and a `---` before the
+  first body section. `to_string` stays fenced YAML. A fence language not
+  in compiled features is `FormatDisabled`.
 - `from_str` also reads the rest of the Page-shaped documents: bare
   YAML/JSON/TOML mappings, unlabeled first fences (sniffed; a sniffed JSON
   or TOML failure is `FrontMatter`, not a YAML fallback), a discarded

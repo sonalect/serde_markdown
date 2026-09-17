@@ -144,6 +144,20 @@ mod tests {
         assert_eq!(page, values::page());
     }
 
+    #[cfg(feature = "json")]
+    #[test]
+    fn page_fenced_json_golden() {
+        let page: types::Page = from_str(goldens::PAGE_FENCED_JSON).expect("json");
+        assert_eq!(page, values::page());
+    }
+
+    #[cfg(feature = "toml")]
+    #[test]
+    fn page_fenced_toml_golden() {
+        let page: types::Page = from_str(goldens::PAGE_FENCED_TOML).expect("toml");
+        assert_eq!(page, values::page());
+    }
+
     #[test]
     fn page_fenced_yml_tag() {
         let page: types::Page = from_str(goldens::PAGE_FENCED_YML).expect("yml");
@@ -158,25 +172,46 @@ mod tests {
     }
 
     #[test]
-    fn page_bare_yaml_json_toml_goldens() {
+    fn page_bare_yaml_golden() {
         let yaml: types::Page = from_str(goldens::PAGE_BARE_YAML).expect("bare yaml");
         assert_eq!(yaml, values::page());
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn page_bare_json_golden() {
         let json: types::Page = from_str(goldens::PAGE_BARE_JSON).expect("bare json");
         assert_eq!(json, values::page());
+    }
+
+    #[cfg(feature = "toml")]
+    #[test]
+    fn page_bare_toml_golden() {
         let toml: types::Page = from_str(goldens::PAGE_BARE_TOML).expect("bare toml");
         assert_eq!(toml, values::page());
     }
 
     #[test]
-    fn page_unlabeled_fence_sniffs() {
+    fn page_unlabeled_yaml_sniffs() {
         let yaml: types::Page = from_str(goldens::PAGE_UNLABELED_YAML).expect("unlabeled yaml");
         assert_eq!(yaml, values::page());
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn page_unlabeled_json_sniffs() {
         let json: types::Page = from_str(goldens::PAGE_UNLABELED_JSON).expect("unlabeled json");
         assert_eq!(json, values::page());
+    }
+
+    #[cfg(feature = "toml")]
+    #[test]
+    fn page_unlabeled_toml_sniffs() {
         let toml: types::Page = from_str(goldens::PAGE_UNLABELED_TOML).expect("unlabeled toml");
         assert_eq!(toml, values::page());
     }
 
+    #[cfg(feature = "json")]
     #[test]
     fn sniffed_json_parse_failure_is_front_matter() {
         // Invalid JSON (unquoted keys) that YAML would accept as a flow mapping.
@@ -192,6 +227,7 @@ mod tests {
         assert!(std::error::Error::source(&err).is_some());
     }
 
+    #[cfg(feature = "toml")]
     #[test]
     fn sniffed_toml_parse_failure_is_front_matter() {
         let unlabeled = "```\nname = \"only\"\ncount =\n```\n";
@@ -248,6 +284,30 @@ mod tests {
         assert_eq!(list.field1, "foo");
         assert_eq!(list.appendix, values::TEXT2);
         assert_eq!(list.text1, "- keep going\n  ---\n- still the same section");
+    }
+
+    #[cfg(not(feature = "json"))]
+    #[test]
+    fn fenced_json_without_feature_is_format_disabled() {
+        let err = from_str::<types::Page>(goldens::PAGE_FENCED_JSON).expect_err("json");
+        assert_eq!(err.kind(), ErrorKind::FormatDisabled);
+        assert!(std::error::Error::source(&err).is_none());
+    }
+
+    #[cfg(not(feature = "toml"))]
+    #[test]
+    fn fenced_toml_without_feature_is_format_disabled() {
+        let err = from_str::<types::Page>(goldens::PAGE_FENCED_TOML).expect_err("toml");
+        assert_eq!(err.kind(), ErrorKind::FormatDisabled);
+        assert!(std::error::Error::source(&err).is_none());
+    }
+
+    #[cfg(not(feature = "yaml"))]
+    #[test]
+    fn fenced_yaml_without_feature_is_format_disabled() {
+        let err = from_str::<types::Page>(goldens::PAGE_FENCED_YAML).expect_err("yaml");
+        assert_eq!(err.kind(), ErrorKind::FormatDisabled);
+        assert!(std::error::Error::source(&err).is_none());
     }
 
     #[test]

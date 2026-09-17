@@ -17,7 +17,24 @@ pub fn to_string<T: Serialize + Markdown>(value: &T) -> Result<String, Error> {
     to_string_with(value, Format::Yaml, FieldsLayout::Fenced)
 }
 
-fn to_string_with<T: Serialize + Markdown>(
+/// Serialize `value` as a fenced Markdown document in `format`.
+///
+/// Same layout as [`to_string`]: a labeled fence (`yaml`, `json`, or `toml`)
+/// then raw `String` body sections. JSON is pretty-printed with 2-space indent;
+/// TOML uses that crate's pretty printer.
+pub fn to_string_with_format<T: Serialize + Markdown>(
+    value: &T,
+    format: Format,
+) -> Result<String, Error> {
+    to_string_with(value, format, FieldsLayout::Fenced)
+}
+
+/// Serialize `value` with an explicit fence language and fields layout.
+///
+/// [`FieldsLayout::Fenced`] wraps fields in a labeled code block.
+/// [`FieldsLayout::Bare`] writes the mapping with no fence and a `---`
+/// separator before the first body section. [`to_string`] is YAML and fenced.
+pub fn to_string_with<T: Serialize + Markdown>(
     value: &T,
     format: Format,
     layout: FieldsLayout,
@@ -246,21 +263,20 @@ fn render(
     format: Format,
     layout: FieldsLayout,
 ) -> Result<String, Error> {
-    if layout != FieldsLayout::Fenced || format != Format::Yaml {
-        return Err(Error::type_error(
-            "only fenced YAML serialize is implemented",
-        ));
-    }
-
     let mut out = String::new();
-    if !captured.fields.is_empty() {
-        let yaml = format::dump(&Value::Object(captured.fields), Format::Yaml)?;
-        out.push_str("```yaml\n");
-        out.push_str(&yaml);
-        if !yaml.ends_with('\n') {
-            out.push('\n');
+    let has_fields = !captured.fields.is_empty();
+    if has_fields {
+        let dumped = format::dump(&Value::Object(captured.fields), format)?;
+        match layout {
+            FieldsLayout::Fenced => {
+                out.push_str("```");
+                out.push_str(fence_lang(format));
+                out.push('\n');
+                push_with_newline(&mut out, &dumped);
+                out.push_str("```\n");
+            }
+            FieldsLayout::Bare => push_with_newline(&mut out, &dumped),
         }
-        out.push_str("```\n");
     }
 
     for (i, name) in body_fields.iter().enumerate() {
@@ -272,7 +288,7 @@ fn render(
                 "body field {name} must serialize as a string"
             )));
         };
-        if i > 0 {
+        if i > 0 || (has_fields && layout == FieldsLayout::Bare) {
             if !out.ends_with('\n') {
                 out.push('\n');
             }
@@ -287,12 +303,28 @@ fn render(
     Ok(out)
 }
 
+fn fence_lang(format: Format) -> &'static str {
+    match format {
+        Format::Yaml => "yaml",
+        Format::Json => "json",
+        Format::Toml => "toml",
+    }
+}
+
+fn push_with_newline(out: &mut String, text: &str) {
+    out.push_str(text);
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde::Serialize;
 
-    use super::to_string;
+    use super::{to_string, to_string_with, to_string_with_format};
     use crate::error::ErrorKind;
+    use crate::format::{FieldsLayout, Format};
     use crate::markdown::Markdown;
     use crate::testdata::{goldens, types, values};
 
@@ -357,6 +389,111 @@ mod tests {
         let page: types::Page =
             crate::from_str(goldens::PAGE_FENCED_YAML).expect("page.fenced.yaml.md");
         assert_eq!(page, values::page());
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn serialize_json_is_labeled_pretty_fence() {
+        let md = to_string_with_format(&values::page(), Format::Json).expect("serialize");
+        assert!(md.starts_with("```json\n"), "{md}");
+        assert!(md.contains("{\n  \"field1\": \"foo\""), "{md}");
+        assert!(md.contains("  \"field2\": \"bar\""), "{md}");
+        assert!(md.contains("  \"field3\": 1"), "{md}");
+        assert!(md.contains("```\nText1 bla bla bla\n---\n"), "{md}");
+        assert!(!md.contains("```\n\n"), "{md}");
+        let back: types::Page = crate::from_str(&md).expect("deserialize");
+        assert_eq!(values::page(), back);
+    }
+
+    #[cfg(feature = "toml")]
+    #[test]
+    fn serialize_toml_is_labeled_pretty_fence() {
+        let md = to_string_with_format(&values::page(), Format::Toml).expect("serialize");
+        assert!(md.starts_with("```toml\n"), "{md}");
+        assert!(md.contains("field1 = \"foo\""), "{md}");
+        assert!(md.contains("field2 = \"bar\""), "{md}");
+        assert!(md.contains("field3 = 1"), "{md}");
+        assert!(md.contains("```\nText1 bla bla bla\n---\n"), "{md}");
+        let back: types::Page = crate::from_str(&md).expect("deserialize");
+        assert_eq!(values::page(), back);
+    }
+
+    #[test]
+    fn serialize_bare_yaml_has_no_fence() {
+        let md =
+            to_string_with(&values::page(), Format::Yaml, FieldsLayout::Bare).expect("serialize");
+        assert!(!md.contains("```"), "{md}");
+        assert!(!md.starts_with('\n'), "{md}");
+        assert!(md.ends_with('\n'), "{md}");
+        assert!(md.contains("field1: foo"), "{md}");
+        assert!(md.contains("field2: bar"), "{md}");
+        assert!(md.contains("field3: 1"), "{md}");
+        assert!(md.contains("---\nText1 bla bla bla\n---\n"), "{md}");
+        let trimmed = md.trim_end();
+        assert!(!trimmed.ends_with("---"), "{md}");
+        let back: types::Page = crate::from_str(&md).expect("deserialize");
+        assert_eq!(values::page(), back);
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn serialize_bare_json_separator_before_body() {
+        let md =
+            to_string_with(&values::page(), Format::Json, FieldsLayout::Bare).expect("serialize");
+        assert!(!md.contains("```"), "{md}");
+        assert!(md.contains("{\n  \"field1\": \"foo\""), "{md}");
+        assert!(md.contains("}\n---\nText1 bla bla bla\n---\n"), "{md}");
+        let back: types::Page = crate::from_str(&md).expect("deserialize");
+        assert_eq!(values::page(), back);
+    }
+
+    #[cfg(feature = "toml")]
+    #[test]
+    fn serialize_bare_toml_separator_before_body() {
+        let md =
+            to_string_with(&values::page(), Format::Toml, FieldsLayout::Bare).expect("serialize");
+        assert!(!md.contains("```"), "{md}");
+        assert!(md.contains("field1 = \"foo\""), "{md}");
+        assert!(md.contains("field3 = 1"), "{md}");
+        assert!(md.contains("---\nText1 bla bla bla\n---\n"), "{md}");
+        let back: types::Page = crate::from_str(&md).expect("deserialize");
+        assert_eq!(values::page(), back);
+    }
+
+    #[test]
+    fn serialize_bare_fields_only_omits_separator() {
+        let md = to_string_with(&values::fields_only(), Format::Yaml, FieldsLayout::Bare)
+            .expect("serialize");
+        assert!(!md.contains("```"), "{md}");
+        assert!(md.contains("name: only"), "{md}");
+        assert!(md.contains("count: 2"), "{md}");
+        assert!(!md.contains("---"), "{md}");
+        let back: types::FieldsOnly = crate::from_str(&md).expect("deserialize");
+        assert_eq!(values::fields_only(), back);
+    }
+
+    #[test]
+    fn to_string_stays_fenced_yaml() {
+        let md = to_string(&values::page()).expect("serialize");
+        assert!(md.starts_with("```yaml\n"), "{md}");
+        let with_format = to_string_with_format(&values::page(), Format::Yaml).expect("yaml");
+        assert_eq!(md, with_format);
+    }
+
+    #[cfg(not(feature = "json"))]
+    #[test]
+    fn json_without_feature_is_format_disabled() {
+        let err = to_string_with_format(&values::page(), Format::Json).expect_err("disabled");
+        assert_eq!(err.kind(), ErrorKind::FormatDisabled);
+        assert!(std::error::Error::source(&err).is_none());
+    }
+
+    #[cfg(not(feature = "toml"))]
+    #[test]
+    fn toml_without_feature_is_format_disabled() {
+        let err = to_string_with_format(&values::page(), Format::Toml).expect_err("disabled");
+        assert_eq!(err.kind(), ErrorKind::FormatDisabled);
+        assert!(std::error::Error::source(&err).is_none());
     }
 
     #[test]

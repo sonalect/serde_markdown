@@ -62,7 +62,7 @@ not use it yet; wiring is M5.
 | [M4](#m4-derive) | done | `#[derive(Markdown)]` / `#[markdown(body)]` |
 | [M5](#m5-yaml-fenced) | done | `to_string` / `from_str` YAML fenced, hand-written |
 | [M6](#m6-document-shapes) | done | Bare, unlabeled, prefix, body-only, fence-not-first |
-| [M7](#m7-json-toml-bare-serialize) | not started | JSON/TOML features; `FieldsLayout::Bare` |
+| [M7](#m7-json-toml-bare-serialize) | done | JSON/TOML features; `FieldsLayout::Bare` |
 | [M8](#m8-option-and-presence) | not started | Trailing vs middle `None`; `Some("")` |
 | [M9](#m9-nested-structured-names-whitespace) | not started | Nested fields, structured body, rename, whitespace |
 | [M10](#m10-wkt) | not started | WKT in fence and body via `buffa-types` |
@@ -412,24 +412,24 @@ Serialize may still be fenced YAML.
 
 ## M7. JSON, TOML, bare serialize
 
-**Status:** not started
+**Status:** done
 
 **Codes:** DESIGN.md §2.2–2.4, §5 `to_string_with_format` /
 `to_string_with`, §5.1 feature errors.
 
 Close only after M6.
 
-- [ ] `to_string_with_format(..., Format::Json)` writes a labeled
+- [x] `to_string_with_format(..., Format::Json)` writes a labeled
       ` ```json ` fence (pretty, 2 spaces). Same for `Toml` and
       `toml::to_string_pretty`. Goldens `page.fenced.json.md` /
       `page.fenced.toml.md` deserialize.
-- [ ] `FieldsLayout::Bare` writes DESIGN.md §2.4 (no fence; `---`
+- [x] `FieldsLayout::Bare` writes DESIGN.md §2.4 (no fence; `---`
       before the first body section). `to_string` still fenced YAML.
-- [ ] `from_str` of ` ```json ` without the `json` feature is
+- [x] `from_str` of ` ```json ` without the `json` feature is
       `FormatDisabled`. Same for yaml/toml. A test crate or
       `trybuild`/feature-gated test covers at least one disabled
       format.
-- [ ] `bazel test //...` green. Owner has reviewed the diff.
+- [x] `bazel test //...` green. Owner has reviewed the diff.
 
 **Review:** formats and bare serialize. Stop.
 
