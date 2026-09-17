@@ -1,0 +1,38 @@
+---
+description: When the user asks for a "full review", produce a coding plan yourself — no weaker subagents
+alwaysApply: true
+---
+
+# Full review
+
+When the user asks for a **full review**, review **all code and all
+docs** in the repository. That means every handwritten source file
+(`src/`, tests, BUILD, proto, scripts), and every document (DESIGN.md,
+ROADMAP.md, README, CHANGELOG, and equivalent). Not DESIGN.md alone.
+Not the current diff. Not the last ROADMAP stage. Not the focused file.
+
+If the Cursor window has more than one git root, review the repository
+of the focused file (or the one the user named). Do not fold a sibling
+repo into the same plan unless asked.
+
+Do **not** implement. The deliverable is a **coding plan**. Do the review
+**in this agent** (exception to `delegate-execution.mdc`): no `Task`
+subagents, no explore/generalPurpose handoff, no weaker model.
+
+## Checklist
+
+1. **Bugs** — wrong results, broken invariants, bad error kinds, edge cases (empty, unclosed fence, invalid input).
+2. **Allocations** — `clone` / `to_owned` / `format!` / extra `Vec` on hot paths; borrow or reuse when it stays clear.
+3. **Dead code** — unused, duplicated, leftover `todo!` for work already shipped.
+4. **Performance** — extra parse of the same buffer, N+1, repeated sniff.
+5. **Docs vs code** — DESIGN.md, ROADMAP.md, and README match behaviour; no contradiction with `src/` (names, fence languages, defaults).
+6. **Spec / API** — public names and error kinds match the contract; no silent defaults the spec left open.
+7. **Tests** — claimed ROADMAP *Check:* boxes have a real test; missing negatives.
+8. **Errors** — `Result` in `src/` (no `panic!` / `unwrap` / `expect` / `assert!`); kind not replaced by `message`.
+9. **Untrusted input** — Markdown, YAML/JSON/TOML fences: no panic on junk input.
+
+Skip an item only when that surface is absent; say so. Do not pad the plan with cosmetic nits.
+
+## Plan shape
+
+Prioritised list. Each item: severity, location, what's wrong, proposed change. No patches until the user asks to implement.

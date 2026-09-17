@@ -1,0 +1,29 @@
+---
+description: Public failures are handwritten Error/ErrorKind. No anyhow or thiserror.
+globs: rust/serde_markdown/src/**/*.rs,rust/serde_markdown_derive/src/**/*.rs
+alwaysApply: true
+---
+
+# Error contract
+
+Public `Result` uses a handwritten crate `Error` (`src/error.rs`), same
+shape as `serde_json::Error`. Not anyhow. Not thiserror. Not a protobuf
+envelope (`code` / `path` / `repeat` / `stack`). Implement
+`std::error::Error`, `Display`, and `serde::{ser,de}::Error` by hand.
+
+Callers match `kind()`. Do not parse `Display`.
+
+| Kind | When |
+| --- | --- |
+| `Syntax` | Unclosed fence, bad info string, scan failure, invalid UTF-8 on `from_slice`. `offset()` is `Some`. |
+| `FrontMatter` | Decoder error on the fields slice. `source()` is the decoder. |
+| `Body` | Section count, empty required structured section, invalid UTF-8 on `Vec<u8>` serialize, decoder error on a structured body section (`source()` set). |
+| `Type` | Root is not a named struct; mapping-layer Serde `custom` / `missing_field`. |
+| `FormatDisabled` | Fence language not in compiled features |
+| `Io` | `to_writer` / `from_reader`. `source()` is `std::io::Error`. |
+
+Do not add a kind unless DESIGN.md §7 / §12 is amended first.
+
+Until `Error` exists, do not introduce anyhow, thiserror, or a second
+error enum in `src/`. Recoverable failure is still `Result`. Library
+`src/` follows `rust-no-panic.mdc`.

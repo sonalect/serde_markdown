@@ -1,0 +1,20 @@
+---
+description: >-
+  Update ROADMAP.md before implementing a new feature or any non-bugfix
+  change. Bug fixes do not need a ROADMAP edit.
+alwaysApply: true
+---
+
+# Roadmap first
+
+Follow `.cursor/skills/roadmap/SKILL.md`.
+
+Update `ROADMAP.md` **before** implementing a new feature or making any
+other product/behavior/API change. Do not start coding `src/`, proto, or
+public docs for that work while the stage (or an amended box) is missing.
+
+**Bug fixes** that restore already-specified behavior do **not** need a
+ROADMAP edit.
+
+Do not tick a box from a verbal claim. Set **Status:** `done` only when
+every box in that stage is `[x]` and the owner has reviewed.

@@ -98,8 +98,98 @@ first.
 9. **Protobuf option number `20260917`.**
 10. **`BODY_FIELDS` uses buffa proto3 JSON names** (`published_at` →
     `publishedAt`).
+11. **Handwritten `Error` / `ErrorKind`.** No `thiserror`, no `anyhow`,
+    no proto error envelope. Callers match `kind()`. `Syntax` has a
+    byte offset. Decoder and IO failures are `source()`.
 
 Open questions in DESIGN.md: none.
+
+---
+
+## Examples
+
+Target usage after M14. Both produce the same document (DESIGN.md §2.1).
+These are not extra M stages.
+
+### Rust struct
+
+```rust
+use serde::{Deserialize, Serialize};
+use serde_markdown::{from_str, to_string, Markdown};
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Markdown)]
+struct Page {
+    field1: String,
+    field2: String,
+    field3: i32,
+    #[markdown(body)]
+    text1: String,
+    #[markdown(body)]
+    text2: String,
+}
+
+let page = Page {
+    field1: "foo".into(),
+    field2: "bar".into(),
+    field3: 1,
+    text1: "Text1 bla bla bla".into(),
+    text2: "Text2 bal bla bla".into(),
+};
+let md = to_string(&page)?;
+let back: Page = from_str(&md)?;
+assert_eq!(page, back);
+```
+
+````markdown
+```yaml
+field1: foo
+field2: bar
+field3: 1
+```
+Text1 bla bla bla
+---
+Text2 bal bla bla
+````
+
+`#[derive(Markdown)]` is M4. `to_string` / `from_str` are M5.
+
+### Protobuf
+
+```protobuf
+syntax = "proto3";
+package example;
+
+import "markdown/options.proto";
+
+message Page {
+  string field1 = 1;
+  string field2 = 2;
+  int32 field3 = 3;
+  string text1 = 4 [(markdown.body) = true];
+  string text2 = 5 [(markdown.body) = true];
+}
+```
+
+```rust
+// build.rs — M11
+buffa_build::Config::new()
+    .files(&["proto/page.proto"])
+    .includes(&["proto/", serde_markdown::PROTO_INCLUDE])
+    .generate_json(true)
+    .apply(serde_markdown::buffa::annotate_markdown_body)
+    .compile()?;
+
+// after generate
+use serde_markdown::{from_str, to_string};
+
+let page = example::Page { /* field1, field2, field3, text1, text2 */ };
+let md = to_string(&page)?;
+let back: example::Page = from_str(&md)?;
+```
+
+Same Markdown as the Rust example. `BODY_FIELDS` is `["text1", "text2"]`
+(proto3 JSON names; one-word identifiers stay unchanged). Owned generated
+messages only; views are out of M0–M14.
 
 ---
 
@@ -118,6 +208,8 @@ them.
 - Forking `buffa-codegen`.
 - Treating proto `bytes` body fields as raw UTF-8 (they stay proto JSON
   base64 unless DESIGN.md adds an opt-in later).
+- `thiserror` / `anyhow` / a proto error envelope for crate `Error`
+  (DESIGN.md §7 / §12).
 - `Any` packing with a `TypeRegistry` (DESIGN.md §4.3 / §9: later).
 - crates.io publish; crate version number for a 1.0.
 - Other language bindings.
@@ -218,9 +310,13 @@ already in `testdata/markdown/`.
 
 Close only after M2.
 
-- [ ] `Error` implements `std::error::Error`, `Display`,
-      `serde::{ser,de}::Error`. Kinds: `Syntax`, `FrontMatter`, `Body`,
-      `Type`, `FormatDisabled`, `Io`. Syntax carries a byte offset.
+- [ ] Handwritten `Error` / `ErrorKind` in `error.rs` (no `thiserror`,
+      no `anyhow`, not a proto message). Implements `std::error::Error`,
+      `Display`, `serde::{ser,de}::Error` by hand. Kinds: `Syntax`,
+      `FrontMatter`, `Body`, `Type`, `FormatDisabled`, `Io`. Callers
+      match `kind()`. `Syntax` has a byte offset. `FrontMatter` and
+      `Io` (and structured-body decoder failures under `Body`) set
+      `source()`.
 - [ ] `Format` is `Yaml` (default) / `Json` / `Toml`.
       `FieldsLayout` is `Fenced` (default) / `Bare`.
 - [ ] `Markdown` trait: `const BODY_FIELDS: &'static [&'static str]`.
@@ -528,5 +624,5 @@ stage.
 
 Out of this plan. After M14 a consumer adds `#[derive(Markdown)]` (or
 imports `options.proto` and runs `annotate_markdown_body`) and calls
-`from_str` / `to_string`. How any one consumer does that is not an M
-stage.
+`from_str` / `to_string`. See [Examples](#examples). How any one
+consumer wires that into their tree is not an M stage.

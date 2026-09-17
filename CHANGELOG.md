@@ -32,7 +32,8 @@ API changes bump the minor.
   fields fence or bare first slice, sniff hint without YAML/JSON/TOML
   parsers, body sections on top-level dash `---` (including setext H2
   underlines; not `***` / `___`, not `---` inside fences or lists).
-- Implementation work order [`ROADMAP.md`](ROADMAP.md) (M0–M14).
+- Implementation work order [`ROADMAP.md`](ROADMAP.md) (M0–M14), including
+  target examples for a hand-written Rust struct and a protobuf message.
 - Bazel + Buf pipeline in the scheda shape: `buf_module`, lint, format,
   `buf.build/anthropics/buffa` plus `protoc-gen-buffa-packaging`,
   `bazel run //proto/markdown:generate`. [`buf.lock`](buf.lock) pins
@@ -50,6 +51,10 @@ API changes bump the minor.
 ### Changed
 
 - Buf CLI `v1.73.0`; `bazel_utils_*` modules `v0.2.6`.
+- Error contract (DESIGN.md §7 / §12): handwritten `Error` and
+  `ErrorKind` like `serde_json` (no `thiserror`, no `anyhow`, no proto
+  envelope). Callers match `kind()`; `Syntax` has a byte offset;
+  decoder and IO failures are `source()`.
 
 ## Links
 

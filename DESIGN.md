@@ -639,7 +639,7 @@ That last path is what makes **arbitrary types** and **WKT objects** work withou
 
 ```text
 src/lib.rs
-src/error.rs
+src/error.rs      // handwritten Error / ErrorKind; no thiserror
 src/parse.rs      // pulldown-cmark split
 src/format.rs     // Format enum, dump/load IR
 src/ser.rs
@@ -683,18 +683,49 @@ Downstream Bazel users depend on the published proto as a Buf module (`markdown/
 
 ## 7. Errors
 
-One `Error` implementing `std::error::Error`, `Display`, `serde::{ser,de}::Error`.
+One handwritten crate type `Error` in `src/error.rs`, in the same shape as
+`serde_json::Error`: a small public `ErrorKind`, human `Display`,
+`std::error::Error`, and `serde::{ser,de}::Error`. Callers **match on
+`kind()`**. They must not parse `Display`.
+
+Do **not** use `thiserror`, `anyhow`, or a protobuf error envelope (`code` /
+`path` / `repeat` / `stack`). Those fit a vault/agent API, not a Serde
+format. `serde::{ser,de}::Error` (`custom`, `missing_field`, …) is
+implemented by hand on this `Error`.
+
+Public surface (names locked; field layout is M3):
+
+```rust
+pub enum ErrorKind {
+    Syntax,
+    FrontMatter,
+    Body,
+    Type,
+    FormatDisabled,
+    Io,
+}
+
+impl Error {
+    pub fn kind(&self) -> ErrorKind { /* … */ }
+    /// Byte offset into the input. `Some` only for `Syntax`.
+    pub fn offset(&self) -> Option<usize> { /* … */ }
+}
+```
+
+`std::error::Error::source()` is set for wrapped decoder and IO failures
+(`FrontMatter`, `Io`, and structured-body decoder failures under `Body`).
+It is unset for `Syntax`, `Type`, and `FormatDisabled`.
 
 | Kind | When |
 | --- | --- |
-| `Syntax` | Unclosed fence, bad info string, parser failure |
-| `FrontMatter` | Wrapped `yaml_serde` / `serde_json` / `toml` error, with “in fence” |
-| `Body` | Section count, empty required structured section, invalid UTF-8 on `Vec<u8>` serialize |
-| `Type` | Root is not a struct |
+| `Syntax` | Unclosed fence, bad info string, CommonMark/fence scan failure, invalid UTF-8 on `from_slice`. Carries a byte offset. |
+| `FrontMatter` | Wrapped `yaml_serde` / `serde_json` / `toml` error while decoding the fields slice (“in fence” / bare fields). `source()` is the decoder error. |
+| `Body` | Section count, empty required structured section, invalid UTF-8 on `Vec<u8>` serialize, or a wrapped decoder error on a structured body section (`source()` set). |
+| `Type` | Root is not a named struct; Serde mapping-layer `custom` / `missing_field` for this format (not the YAML/JSON/TOML decoder). |
 | `FormatDisabled` | Fence language not in compiled features |
-| `Io` | `to_writer` / `from_reader` |
+| `Io` | `to_writer` / `from_reader`. `source()` is `std::io::Error`. |
 
-Syntax errors include byte offset (from pulldown-cmark / fence scan).
+Exact `Display` wording is not locked here; M3 picks strings and rustdoc.
 
 ## 8. Whitespace and encoding
 
@@ -726,6 +757,8 @@ Syntax errors include byte offset (from pulldown-cmark / fence scan).
 - Generated `Markdown` impl for buffa **views**.
 - Forking `buffa-codegen`.
 - Treating proto `bytes` body fields as raw UTF-8 (they stay proto JSON base64 unless we add an opt-in later).
+- `thiserror` / `anyhow` for the crate `Error`.
+- A protobuf / scheda-style error envelope (`code`, `path`, `repeat`, `stack`).
 
 ## 11. Implementation order
 
@@ -755,5 +788,6 @@ Order those stages implement:
 | 8 | Split on **top-level dash thematic breaks only**; ignore `***` / `___` and any `---` inside containers/fences. |
 | 9 | Protobuf option number **`20260917`**. |
 | 10 | `BODY_FIELDS` uses buffa proto3 JSON names (`published_at` → `publishedAt`). |
+| 11 | **Handwritten `Error` / `ErrorKind`.** No `thiserror`, no `anyhow`, no proto error envelope. Callers match `kind()`. `Syntax` has a byte offset. Decoder and IO failures are `source()`. |
 
 Open questions: none.
