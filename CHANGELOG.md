@@ -38,7 +38,8 @@ API changes bump the minor.
   `buf.build/anthropics/buffa` plus `protoc-gen-buffa-packaging`,
   `bazel run //proto/markdown:generate`. [`buf.lock`](buf.lock) pins
   well-known types so Buf LSP can resolve `google/protobuf/*.proto`.
-- Workspace crates `serde_markdown` (stub) and `serde-markdown-generated`.
+- Workspace crates `serde_markdown`, `serde_markdown_derive`, and
+  `serde-markdown-generated`.
 - Markdown split parser choice: `pulldown-cmark`. Fields may be a first
   fenced block or **bare** YAML/JSON/TOML (no ` ``` `) before the first
   `---`; format is sniffed. Leading whitespace and `---` before fields are
@@ -98,6 +99,10 @@ API changes bump the minor.
 
 ### Changed
 
+- DESIGN.md, README, and this file match the shipped crate: function names
+  (`from_str` is `DeserializeOwned`), feature `json = []`, derive path
+  `rust/serde_markdown_derive`, error kinds and defaults. DESIGN.md §11 is
+  only a pointer to ROADMAP.md.
 - `serde_markdown_derive` uses `syn` 3.0.5.
 - Buf CLI `v1.73.0`; `bazel_utils_*` modules `v0.2.6`.
 - Error contract (DESIGN.md §7 / §12): handwritten `Error` and

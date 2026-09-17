@@ -1,7 +1,46 @@
 # serde_markdown
 
 Serde format crate: serialize and deserialize Rust structs (and buffa protobuf
-messages) as Markdown documents. Design: [DESIGN.md](DESIGN.md).
+messages) as Markdown documents. Mapping: [DESIGN.md](DESIGN.md). Stages:
+[ROADMAP.md](ROADMAP.md).
+
+## Crate
+
+Default serialize is a labeled `yaml` fence (`Format::Yaml` +
+`FieldsLayout::Fenced`). JSON and TOML only via `to_string_with_format` or
+`to_string_with`. `from_str` / `from_slice` / `from_reader` take
+`DeserializeOwned`. Match `Error::kind()`; kinds are `Syntax`, `FrontMatter`,
+`Body`, `Type`, `FormatDisabled`, `Io`.
+
+```rust
+use serde::{Deserialize, Serialize};
+use serde_markdown::{from_str, to_string, Markdown};
+
+#[derive(Debug, PartialEq, Serialize, Deserialize, Markdown)]
+struct Page {
+    title: String,
+    #[markdown(body)]
+    body: String,
+}
+
+let page = Page {
+    title: "Hi".into(),
+    body: "Hello".into(),
+};
+let md = to_string(&page)?;
+let back: Page = from_str(&md)?;
+```
+
+Also `to_vec` / `to_writer`. Feature `buffa` (off-default) adds
+`annotate_markdown_body` and `PROTO_INCLUDE`.
+
+| Feature | Default | Role |
+| --- | --- | --- |
+| `yaml` | yes | YAML fence dump/load (`yaml_serde`) |
+| `json` | yes | JSON fence dump/load (`serde_json` is always the fields IR) |
+| `toml` | yes | TOML fence dump/load |
+| `derive` | yes | `#[derive(Markdown)]` |
+| `buffa` | no | `annotate_markdown_body` |
 
 ## Layout
 
@@ -15,6 +54,7 @@ messages) as Markdown documents. Design: [DESIGN.md](DESIGN.md).
 | [`rust/serde_markdown/testdata`](rust/serde_markdown/testdata) | Golden Markdown documents |
 | [`rust/generated`](rust/generated) | Buffa stubs from `proto/markdown` |
 | [`rust/serde_markdown`](rust/serde_markdown) | Format crate |
+| [`rust/serde_markdown_derive`](rust/serde_markdown_derive) | `#[derive(Markdown)]` |
 | [`MODULE.bazel`](MODULE.bazel) | Bazel module: Rust, Buf, linters |
 
 ## Proto generate

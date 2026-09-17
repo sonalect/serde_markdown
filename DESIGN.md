@@ -1,6 +1,6 @@
 # Design: serde_markdown
 
-Status: draft (decisions from 2026-09-17 applied)
+Status: mapping locked (decisions from 2026-09-17 applied)
 Crate: `serde_markdown`
 License: Apache-2.0
 
@@ -314,7 +314,7 @@ impl serde_markdown::Markdown for Page {
 
 `to_string` / `from_str` require `T: Serialize + Markdown` / `T: Deserialize + Markdown`. Types with no body fields still implement `Markdown` with an empty list (fields-only documents).
 
-Without the derive, the same list can be supplied at the call site (`to_string_with(value, &opts)`). That is the escape hatch for types you do not own.
+Without the derive, implement `Markdown` on the type (empty `BODY_FIELDS` for fields-only). `to_string_with` selects fence language and layout; it does not take a body-field list.
 
 ### 3.2 Protobuf (buffa): field option + editions feature
 
@@ -511,8 +511,8 @@ pub fn to_writer<W: io::Write, T: Serialize + Markdown>(
     value: &T,
 ) -> Result<(), Error>;
 
-pub fn from_str<'a, T: Deserialize<'a> + Markdown>(s: &'a str) -> Result<T, Error>;
-pub fn from_slice<'a, T: Deserialize<'a> + Markdown>(bytes: &'a [u8]) -> Result<T, Error>;
+pub fn from_str<T: DeserializeOwned + Markdown>(s: &str) -> Result<T, Error>;
+pub fn from_slice<T: DeserializeOwned + Markdown>(bytes: &[u8]) -> Result<T, Error>;
 pub fn from_reader<R, T>(reader: R) -> Result<T, Error>
 where
     R: io::Read,
@@ -559,7 +559,12 @@ pub trait Markdown {
     /// Serde field names of body sections, declaration order.
     const BODY_FIELDS: &'static [&'static str];
 }
+
+pub const DESIGN: &str = "DESIGN.md";
+pub const PROTO_INCLUDE: &str = /* CARGO_MANIFEST_DIR/../../proto */;
 ```
+
+`from_str` / `from_slice` / `from_reader` require `DeserializeOwned` because the mapping layer owns a JSON IR; they do not borrow from the input. Feature `buffa` exports `serde_markdown::buffa::annotate_markdown_body`.
 
 ### 5.1 Crate layout and features
 
@@ -572,14 +577,14 @@ rust/generated/                           # bazel run //proto/markdown:generate
 rust/serde_markdown/                      # format crate
 rust/serde_markdown/testdata/markdown/    # golden documents
 rust/serde_markdown/src/testdata/         # hand-written structs + values
-serde_markdown_derive/                    # later: #[derive(Markdown)]
+rust/serde_markdown_derive/               # #[derive(Markdown)]
 ```
 
 ```toml
 [features]
 default = ["yaml", "json", "toml", "derive"]
 yaml = ["dep:yaml_serde"]
-json = ["dep:serde_json"]
+json = []
 toml = ["dep:toml"]
 derive = ["dep:serde_markdown_derive"]
 buffa = ["dep:buffa", "dep:buffa-types", "dep:buffa-descriptor"]
@@ -589,9 +594,9 @@ Feature `buffa` is **off-default**. Bazel CI still enables it. `annotate_markdow
 
 YAML crate: **`yaml_serde` 0.10** (YAML Organization fork of `serde_yaml`). Not `serde_yaml` (archived), not `serde_yml` (unmaintained / RUSTSEC).
 
-`from_str` of a ` ```json ` document without the `json` feature → clear runtime error `format not enabled`. Same for yaml/toml.
+`from_str` of a ` ```json ` document without the `json` feature → `ErrorKind::FormatDisabled` (`Display` is `format not enabled: json`). Same for yaml/toml.
 
-IR: keep **`serde_json::Value`** even for yaml-only builds if the `json` feature is default. If we ever ship yaml-only, introduce a small internal `Value` or go through `yaml_serde::Value`. Preferred v1: `json` stays in the default feature set because buffa WKT and proto JSON are JSON-shaped.
+IR: **`serde_json::Value`** is always linked (fields IR), so feature `json` is empty (`json = []`) and only gates JSON fence dump/load. Preferred v1: `json` stays in the default feature set because buffa WKT and proto JSON are JSON-shaped.
 
 ## 6. Architecture
 
@@ -669,7 +674,7 @@ Same shape as [scheda](https://github.com/amsokol/scheda): bzlmod, `bazel_utils_
 
 | Path | Role |
 | --- | --- |
-| `MODULE.bazel` | `serde_markdown` module, `protobuf` 36.1, `rules_rust`, `bazel_utils_{bazel,buf,core,md,rust}` |
+| `MODULE.bazel` | `serde_markdown` module, `protobuf` 36.1.bcr.1, `rules_rust`, `bazel_utils_{bazel,buf,core,md,rust}` |
 | `buf.MODULE.bazel` | Buf CLI `v1.73.0` |
 | `rust.MODULE.bazel` | Rust 1.98.1 / edition 2024, crate_universe, `protoc-gen-buffa-packaging` |
 | `buf.yaml` | module `proto/`, dep `buf.build/protocolbuffers/wellknowntypes` |
@@ -690,7 +695,7 @@ bazel test //bazel:markdown
 bazel run //bazel:format
 ```
 
-`annotate_markdown_body` (later) still applies for consumers who compile their own `.proto` files. This repo’s fixtures in `proto/markdown/testdata/` (`markdown.testdata.*`) are compiled here so WKT + `(markdown.body)` round-trips can be tested against generated buffa types. They are not part of the public `markdown` proto API. Matching golden Markdown lives in `rust/serde_markdown/testdata/markdown/`; hand-written structs are `serde_markdown` test-only types in `src/testdata/`.
+`annotate_markdown_body` applies for consumers who compile their own `.proto` files. This repo’s fixtures in `proto/markdown/testdata/` (`markdown.testdata.*`) are compiled here so WKT + `(markdown.body)` round-trips can be tested against generated buffa types. They are not part of the public `markdown` proto API. Matching golden Markdown lives in `rust/serde_markdown/testdata/markdown/`; hand-written structs are `serde_markdown` test-only types in `src/testdata/`.
 
 Downstream Bazel users depend on the published proto as a Buf module (`markdown/options.proto`) the same way scheda consumers import `api/v1`.
 
@@ -706,7 +711,7 @@ Do **not** use `thiserror`, `anyhow`, or a protobuf error envelope (`code` /
 format. `serde::{ser,de}::Error` (`custom`, `missing_field`, …) is
 implemented by hand on this `Error`.
 
-Public surface (names locked; field layout is M3):
+Public surface (names locked):
 
 ```rust
 pub enum ErrorKind {
@@ -738,7 +743,7 @@ It is unset for `Syntax`, `Type`, and `FormatDisabled`.
 | `FormatDisabled` | Fence language not in compiled features |
 | `Io` | `to_writer` / `from_reader`. `source()` is `std::io::Error`. |
 
-Exact `Display` wording is not locked here; M3 picks strings and rustdoc.
+Exact `Display` wording lives in rustdoc. `FormatDisabled` displays as `format not enabled: yaml` (or `json` / `toml`).
 
 ## 8. Whitespace and encoding
 
@@ -775,17 +780,7 @@ Exact `Display` wording is not locked here; M3 picks strings and rustdoc.
 
 ## 11. Implementation order
 
-Stage checklist: [ROADMAP.md](ROADMAP.md)
-(M0–M14). Do not treat this section as a second tracker.
-
-Order those stages implement:
-
-1. `parse.rs` + CommonMark split tests (fences, unlabeled sniff, leading `---`, nested `---`, `***`, lists).
-2. `Error`, `Format`, `Markdown` trait, derive crate.
-3. `ser` / `de` for hand-written structs, YAML default; then JSON + TOML; then `Option`.
-4. Nested / structured / rename / whitespace; WKT via `buffa-types`.
-5. `buffa::annotate_markdown_body` (options.proto already in tree).
-6. IO helpers, feature matrix, docs, acceptance goldens.
+Stage order is [ROADMAP.md](ROADMAP.md) (M0–M14). This section is only that pointer. Do not treat it as a second checklist.
 
 ## 12. Resolved decisions
 

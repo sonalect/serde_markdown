@@ -5,8 +5,8 @@ Version 0.1, 17 September 2026.
 Work order so the crate `serde_markdown` implements [DESIGN.md](DESIGN.md).
 The mapping is already locked: optional first fields block (fenced or
 bare YAML/JSON/TOML), then body sections split on top-level `---`,
-body fields marked explicitly. M0–M2 are done. This file remains the
-work order for M3–M14.
+body fields marked explicitly. M0–M13 are done. Remaining stage is
+M14.
 
 This is not a 1.0 release plan. v1 is 0.x. Compatible additions bump
 the patch; breaking API changes bump the minor ([CHANGELOG.md](CHANGELOG.md)).
@@ -68,7 +68,7 @@ not use it yet; wiring is M5.
 | [M10](#m10-wkt) | done | WKT in fence and body via `buffa-types` |
 | [M11](#m11-buffa-annotate) | done | `annotate_markdown_body`; generated messages |
 | [M12](#m12-io-and-features) | done | `to_vec` / `from_slice` / writer; feature matrix |
-| [M13](#m13-documents-once) | not started | DESIGN, README, CHANGELOG, this dashboard |
+| [M13](#m13-documents-once) | done | DESIGN, README, CHANGELOG, this dashboard |
 | [M14](#m14-acceptance) | not started | Golden round-trips; `bazel test //...` |
 
 ---
@@ -563,19 +563,19 @@ Close only after M11.
 
 ## M13. Documents once
 
-**Status:** not started
+**Status:** done
 
 Close only after M12 and green tests. One pass over documents that still
 contradict the code. Do not polish twice.
 
-- [ ] DESIGN.md, README, this file's dashboard statuses, and module
+- [x] DESIGN.md, README, this file's dashboard statuses, and module
       rustdoc match shipped behaviour (function names, feature names,
       error kinds, defaults).
-- [ ] DESIGN.md §11 is a pointer to this file, not a second checklist.
-- [ ] CHANGELOG `## [Unreleased]` states what M2–M12 shipped when this
+- [x] DESIGN.md §11 is a pointer to this file, not a second checklist.
+- [x] CHANGELOG `## [Unreleased]` states what M2–M12 shipped when this
       work is committed; this box is the note, not a separate
       changelog-only commit.
-- [ ] Owner has reviewed the docs diff.
+- [x] Owner has reviewed the docs diff.
 
 **Review:** document consistency. Stop.
 
@@ -607,16 +607,15 @@ Close only after M13.
 
 - Crate version number for a crates.io release (CHANGELOG / 0.x rules
   at publish).
-- Exact `Error` `Display` wording. M3 picks strings and rustdoc.
+- Exact `Error` `Display` wording (rustdoc on `Error`; this plan does not
+  lock strings).
 
 ---
 
 ## 6. Open questions
 
-None that block M2. DESIGN.md §12 is closed. Remaining items in §5 are
-implementation choices for later M stages. If the owner rejects a locked
-decision in §3, amend DESIGN.md §12 and this file before that later
-stage.
+None. DESIGN.md §12 is closed. If the owner rejects a locked decision in
+§3, amend DESIGN.md §12 and this file before further work.
 
 ---
 
