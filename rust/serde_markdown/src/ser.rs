@@ -10,11 +10,12 @@ use crate::markdown::Markdown;
 /// Serialize `value` as a fenced YAML Markdown document.
 ///
 /// The fields block is a labeled `yaml` fence. Body `String` fields are written
-/// as raw section text, joined with `\n---\n`. Trailing `None` body fields are
-/// omitted; a middle `None` is an empty section; `Some("")` is the two
-/// characters `""`. There is no leading blank line, one newline after the
-/// closing fence, a trailing newline at EOF, and no trailing `---` after
-/// the last emitted section.
+/// as raw section text; nested objects and scalars use the fence-format dump.
+/// Sections are joined with `\n---\n`. Trailing `None` body fields are omitted;
+/// a middle `None` is an empty section; `Some("")` is the two characters `""`.
+/// There is no leading blank line, one newline after the closing fence, a
+/// trailing newline at EOF, and no trailing `---` after the last emitted
+/// section.
 pub fn to_string<T: Serialize + Markdown>(value: &T) -> Result<String, Error> {
     to_string_with(value, Format::Yaml, FieldsLayout::Fenced)
 }
@@ -22,8 +23,8 @@ pub fn to_string<T: Serialize + Markdown>(value: &T) -> Result<String, Error> {
 /// Serialize `value` as a fenced Markdown document in `format`.
 ///
 /// Same layout as [`to_string`]: a labeled fence (`yaml`, `json`, or `toml`)
-/// then raw `String` body sections. JSON is pretty-printed with 2-space indent;
-/// TOML uses that crate's pretty printer.
+/// then body sections. JSON is pretty-printed with 2-space indent; TOML uses
+/// that crate's pretty printer.
 pub fn to_string_with_format<T: Serialize + Markdown>(
     value: &T,
     format: Format,
@@ -283,7 +284,7 @@ fn render(
 
     let mut slots = Vec::with_capacity(body_fields.len());
     for name in body_fields {
-        slots.push(body_slot(name, captured.body.get(*name))?);
+        slots.push(body_slot(captured.body.get(*name), format)?);
     }
     while slots.pop_if(|slot| matches!(slot, BodySlot::Absent)).is_some() {}
 
@@ -311,19 +312,17 @@ fn render(
     Ok(out)
 }
 
-enum BodySlot<'a> {
+enum BodySlot {
     Absent,
-    Raw(&'a str),
+    Raw(String),
 }
 
-fn body_slot<'a>(name: &str, value: Option<&'a Value>) -> Result<BodySlot<'a>, Error> {
+fn body_slot(value: Option<&Value>, format: Format) -> Result<BodySlot, Error> {
     match value {
         None | Some(Value::Null) => Ok(BodySlot::Absent),
-        Some(Value::String(s)) if s.is_empty() => Ok(BodySlot::Raw("\"\"")),
-        Some(Value::String(s)) => Ok(BodySlot::Raw(s)),
-        Some(_) => Err(Error::body(format!(
-            "body field {name} must serialize as a string"
-        ))),
+        Some(Value::String(s)) if s.is_empty() => Ok(BodySlot::Raw("\"\"".to_owned())),
+        Some(Value::String(s)) => Ok(BodySlot::Raw(s.clone())),
+        Some(other) => Ok(BodySlot::Raw(format::dump(other, format)?)),
     }
 }
 
@@ -574,5 +573,73 @@ mod tests {
         let err = to_string(&UnitRoot).expect_err("unit root");
         assert_eq!(err.kind(), ErrorKind::Type);
         assert_eq!(err.to_string(), "root must be a named struct");
+    }
+
+    #[test]
+    fn nested_round_trip() {
+        let value = values::nested();
+        let from_golden: types::NestedFields =
+            crate::from_str(goldens::NESTED_FENCED_YAML).expect("golden");
+        assert_eq!(value, from_golden);
+        let md = to_string(&value).expect("serialize");
+        assert!(md.contains("author: Ada"), "{md}");
+        assert!(md.contains("draft: true"), "{md}");
+        let back: types::NestedFields = crate::from_str(&md).expect("round-trip");
+        assert_eq!(value, back);
+    }
+
+    #[test]
+    fn structured_body_is_fence_format_dump() {
+        let value = values::article();
+        let from_golden: types::Article =
+            crate::from_str(goldens::STRUCTURED_FENCED_YAML).expect("golden");
+        assert_eq!(value, from_golden);
+        let md = to_string(&value).expect("serialize");
+        assert!(md.contains("```yaml\n"), "{md}");
+        assert!(md.contains("title: Hello"), "{md}");
+        assert!(md.contains("heading: Intro"), "{md}");
+        assert!(md.contains("pages: 3"), "{md}");
+        let back: types::Article = crate::from_str(&md).expect("round-trip");
+        assert_eq!(value, back);
+    }
+
+    #[cfg(feature = "json")]
+    #[test]
+    fn structured_json_round_trip() {
+        let value = values::article();
+        let md = to_string_with_format(&value, Format::Json).expect("serialize");
+        assert!(md.contains("```json\n"), "{md}");
+        assert!(md.contains("\"heading\": \"Intro\""), "{md}");
+        let back: types::Article = crate::from_str(&md).expect("round-trip");
+        assert_eq!(value, back);
+    }
+
+    #[test]
+    fn serde_rename_keys_in_markdown() {
+        let value = values::json_names();
+        let from_golden: types::JsonNames =
+            crate::from_str(goldens::NAMES_FENCED_YAML).expect("golden");
+        assert_eq!(value, from_golden);
+        let md = to_string(&value).expect("serialize");
+        assert!(md.contains("publishedAt:"), "{md}");
+        assert!(!md.contains("published_at"), "{md}");
+        assert!(md.contains("A body note."), "{md}");
+        assert!(!md.contains("body_note"), "{md}");
+        assert!(
+            !md.contains("bodyNote:"),
+            "body field name must not appear as a key, got {md}"
+        );
+        let back: types::JsonNames = crate::from_str(&md).expect("round-trip");
+        assert_eq!(value, back);
+    }
+
+    #[test]
+    fn whitespace_round_trip_keeps_interiors() {
+        let value = values::whitespace_page();
+        let md = to_string(&value).expect("serialize");
+        assert!(md.contains("spaces   \n"), "{md}");
+        assert!(md.contains("🦀"), "{md}");
+        let back: types::Page = crate::from_str(&md).expect("round-trip");
+        assert_eq!(value, back);
     }
 }

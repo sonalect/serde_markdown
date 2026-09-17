@@ -64,7 +64,7 @@ not use it yet; wiring is M5.
 | [M6](#m6-document-shapes) | done | Bare, unlabeled, prefix, body-only, fence-not-first |
 | [M7](#m7-json-toml-bare-serialize) | done | JSON/TOML features; `FieldsLayout::Bare` |
 | [M8](#m8-option-and-presence) | done | Trailing vs middle `None`; `Some("")` |
-| [M9](#m9-nested-structured-names-whitespace) | not started | Nested fields, structured body, rename, whitespace |
+| [M9](#m9-nested-structured-names-whitespace) | done | Nested fields, structured body, rename, whitespace |
 | [M10](#m10-wkt) | not started | WKT in fence and body via `buffa-types` |
 | [M11](#m11-buffa-annotate) | not started | `annotate_markdown_body`; generated messages |
 | [M12](#m12-io-and-features) | not started | `to_vec` / `from_slice` / writer; feature matrix |
@@ -461,22 +461,22 @@ Close only after M7. Use `types::OptionalBody` and
 
 ## M9. Nested, structured, names, whitespace
 
-**Status:** not started
+**Status:** done
 
 **Codes:** DESIGN.md §4.1–4.2, §8, §9 (nested / rename / whitespace).
 
 Close only after M8.
 
-- [ ] Nested front matter (`nested.fenced.yaml.md`,
+- [x] Nested front matter (`nested.fenced.yaml.md`,
       `types::NestedFields`).
-- [ ] Structured body section is fence-format dump of the object
+- [x] Structured body section is fence-format dump of the object
       (`structured.fenced.yaml.md`, `types::Article`).
-- [ ] `#[serde(rename)]` / proto3 JSON names: Markdown keys are
+- [x] `#[serde(rename)]` / proto3 JSON names: Markdown keys are
       `publishedAt` / `bodyNote` (`names.fenced.yaml.md`).
-- [ ] Do not trim section interiors. Trailing spaces and internal
+- [x] Do not trim section interiors. Trailing spaces and internal
       blank lines survive (`whitespace.unicode.md`). Unicode in body
       is UTF-8.
-- [ ] `bazel test //...` green. Owner has reviewed the diff.
+- [x] `bazel test //...` green. Owner has reviewed the diff.
 
 **Review:** nested and whitespace. Stop.
 

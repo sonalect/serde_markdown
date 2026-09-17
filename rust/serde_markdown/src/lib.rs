@@ -78,6 +78,7 @@ mod testdata_smoke {
         let _ = values::body_only_generated();
         let _ = values::nested();
         let _ = values::nested_generated();
+        let _ = values::whitespace_page();
         let _ = values::optional_middle_none();
         let _ = values::optional_trailing_none();
         let _ = values::optional_leading_none();

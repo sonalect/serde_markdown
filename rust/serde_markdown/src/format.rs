@@ -3,6 +3,7 @@
 //! [`Format`] and [`FieldsLayout`] live here. Dump and load of the fields
 //! intermediate representation (a JSON value) go through the fence language.
 
+use std::error::Error as StdError;
 use std::fmt;
 
 use serde_json::Value;
@@ -55,10 +56,33 @@ pub(crate) fn dump(value: &Value, format: Format) -> Result<String, Error> {
 
 /// Decode a fields slice in `format` to a JSON value.
 pub(crate) fn load(src: &str, format: Format) -> Result<Value, Error> {
+    decode(src, format, false)
+}
+
+/// Decode a structured body section in `format`.
+///
+/// Decoder failures are [`crate::ErrorKind::Body`] with `source` set.
+/// [`crate::ErrorKind::FormatDisabled`] is unchanged.
+pub(crate) fn load_body(src: &str, format: Format) -> Result<Value, Error> {
+    decode(src, format, true)
+}
+
+fn decode(src: &str, format: Format, body: bool) -> Result<Value, Error> {
     match format {
-        Format::Yaml => load_yaml(src),
-        Format::Json => load_json(src),
-        Format::Toml => load_toml(src),
+        Format::Yaml => load_yaml(src, body),
+        Format::Json => load_json(src, body),
+        Format::Toml => load_toml(src, body),
+    }
+}
+
+fn wrap_decoder<E>(err: E, body: bool) -> Error
+where
+    E: Into<Box<dyn StdError + Send + Sync + 'static>>,
+{
+    if body {
+        Error::body_source("structured section", err)
+    } else {
+        Error::front_matter(err)
     }
 }
 
@@ -98,38 +122,38 @@ fn dump_toml(value: &Value) -> Result<String, Error> {
     }
 }
 
-fn load_yaml(src: &str) -> Result<Value, Error> {
+fn load_yaml(src: &str, body: bool) -> Result<Value, Error> {
     #[cfg(feature = "yaml")]
     {
-        yaml_serde::from_str(src).map_err(Error::front_matter)
+        yaml_serde::from_str(src).map_err(|err| wrap_decoder(err, body))
     }
     #[cfg(not(feature = "yaml"))]
     {
-        let _ = src;
+        let _ = (src, body);
         Err(Error::format_disabled(Format::Yaml))
     }
 }
 
-fn load_json(src: &str) -> Result<Value, Error> {
+fn load_json(src: &str, body: bool) -> Result<Value, Error> {
     #[cfg(feature = "json")]
     {
-        serde_json::from_str(src).map_err(Error::front_matter)
+        serde_json::from_str(src).map_err(|err| wrap_decoder(err, body))
     }
     #[cfg(not(feature = "json"))]
     {
-        let _ = src;
+        let _ = (src, body);
         Err(Error::format_disabled(Format::Json))
     }
 }
 
-fn load_toml(src: &str) -> Result<Value, Error> {
+fn load_toml(src: &str, body: bool) -> Result<Value, Error> {
     #[cfg(feature = "toml")]
     {
-        toml::from_str(src).map_err(Error::front_matter)
+        toml::from_str(src).map_err(|err| wrap_decoder(err, body))
     }
     #[cfg(not(feature = "toml"))]
     {
-        let _ = src;
+        let _ = (src, body);
         Err(Error::format_disabled(Format::Toml))
     }
 }

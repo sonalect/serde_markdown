@@ -72,6 +72,10 @@ API changes bump the minor.
   section, and `Some("")` is the two characters `""`. Extra sections, a
   missing required body section, and an empty section for a required
   structured field are `Body`.
+- Nested front-matter mappings, structured body sections as a fence-format
+  dump of the object, Serde `rename` keys (`publishedAt` / `bodyNote`),
+  and untrimmed body interiors (trailing spaces, internal blank lines,
+  Unicode).
 - `#[derive(Markdown)]` and `#[markdown(body)]` via workspace crate
   `serde_markdown_derive`, re-exported behind the `derive` feature (on by
   default). Emitted `BODY_FIELDS` uses Serde field names after `rename`.

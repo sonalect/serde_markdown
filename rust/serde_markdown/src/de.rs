@@ -1,6 +1,11 @@
 //! Deserialize a `Markdown` root struct from a document.
 
-use serde::de::DeserializeOwned;
+use std::vec;
+
+use serde::de::{
+    DeserializeOwned, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor,
+};
+use serde::de::value::{StringDeserializer, StrDeserializer};
 use serde_json::{Map, Value};
 
 use crate::error::{Error, ErrorKind};
@@ -20,28 +25,43 @@ use crate::parse::{self, Document, Fields, Sniff};
 /// discarded. A fenced `yaml` block that is not first is body.
 ///
 /// Body fields listed in [`Markdown::BODY_FIELDS`] are filled from sections
-/// in declaration order; `String` sections are the raw section text.
+/// in declaration order. `String` / bytes sections are the raw section text
+/// (interiors are not trimmed). Nested structs, maps, sequences, and scalars
+/// parse as the fields format when a fields block was present, otherwise YAML.
 ///
 /// Trailing omitted sections become `None` on optional fields. An empty
 /// section is `None`; a section whose content is the two characters `""`
 /// is `Some("")`. Extra sections, a missing required section, and an empty
-/// section for a required structured field are [`ErrorKind::Body`].
+/// section for a required structured field are [`ErrorKind::Body`]. A decoder
+/// failure on a structured section is [`ErrorKind::Body`] with `source` set.
 pub fn from_str<T>(s: &str) -> Result<T, Error>
 where
     T: DeserializeOwned + Markdown,
 {
-    let (mut fields, body) = decode_document(parse::parse(s))?;
-    let used_absent = assign_body(&mut fields, T::BODY_FIELDS, &body)?;
-    serde_json::from_value(Value::Object(fields)).map_err(|err| {
-        if used_absent {
-            Error::body(err)
-        } else {
-            Error::type_error(err)
-        }
+    let decoded = decode_document(parse::parse(s))?;
+    if decoded.body.len() > T::BODY_FIELDS.len() {
+        return Err(Error::body(format!(
+            "expected at most {} body section(s), found {}",
+            T::BODY_FIELDS.len(),
+            decoded.body.len()
+        )));
+    }
+    let slots = section_slots(T::BODY_FIELDS.len(), &decoded.body);
+    serde::de::Deserialize::deserialize(RootDe {
+        fields: decoded.fields,
+        body_fields: T::BODY_FIELDS,
+        slots,
+        format: decoded.format,
     })
 }
 
-fn decode_document(doc: Document) -> Result<(Map<String, Value>, Vec<String>), Error> {
+struct Decoded {
+    fields: Map<String, Value>,
+    body: Vec<String>,
+    format: Format,
+}
+
+fn decode_document(doc: Document) -> Result<Decoded, Error> {
     let Document { fields, body } = doc;
     match fields {
         Fields::Fenced {
@@ -51,15 +71,27 @@ fn decode_document(doc: Document) -> Result<(Map<String, Value>, Vec<String>), E
         } => {
             let format = sniff_format(labeled.unwrap_or(sniff));
             let map = mapping_or_type_error(format::load(&inner, format)?)?;
-            Ok((map, body))
+            Ok(Decoded {
+                fields: map,
+                body,
+                format,
+            })
         }
         Fields::Bare { sniff, inner } => match load_bare_mapping(&inner, sniff)? {
-            Some(map) => Ok((map, body)),
+            Some(map) => Ok(Decoded {
+                fields: map,
+                body,
+                format: sniff_format(sniff),
+            }),
             None => {
                 let mut sections = Vec::with_capacity(body.len() + 1);
                 sections.push(inner);
                 sections.extend(body);
-                Ok((Map::new(), sections))
+                Ok(Decoded {
+                    fields: Map::new(),
+                    body: sections,
+                    format: Format::Yaml,
+                })
             }
         },
     }
@@ -107,37 +139,27 @@ fn sniff_format(sniff: Sniff) -> Format {
 /// section, which is `None`).
 const EMPTY_STRING_SECTION: &str = "\"\"";
 
-fn assign_body(
-    fields: &mut Map<String, Value>,
-    body_fields: &'static [&'static str],
-    sections: &[String],
-) -> Result<bool, Error> {
-    if sections.len() > body_fields.len() {
-        return Err(Error::body(format!(
-            "expected at most {} body section(s), found {}",
-            body_fields.len(),
-            sections.len()
-        )));
-    }
-    let mut used_absent = sections.len() < body_fields.len();
-    for (i, name) in body_fields.iter().enumerate() {
-        let value = match sections.get(i) {
-            None => Value::Null,
+#[derive(Clone)]
+enum SectionSlot {
+    Absent,
+    Empty,
+    Text(String),
+}
+
+fn section_slots(n: usize, sections: &[String]) -> Vec<SectionSlot> {
+    (0..n)
+        .map(|i| match sections.get(i) {
+            None => SectionSlot::Absent,
             Some(section) => {
                 let text = section_text(section);
                 if text.is_empty() {
-                    used_absent = true;
-                    Value::Null
-                } else if text == EMPTY_STRING_SECTION {
-                    Value::String(String::new())
+                    SectionSlot::Empty
                 } else {
-                    Value::String(text.to_owned())
+                    SectionSlot::Text(text.to_owned())
                 }
             }
-        };
-        fields.insert((*name).to_owned(), value);
-    }
-    Ok(used_absent)
+        })
+        .collect()
 }
 
 /// Drop the document line terminator after a section. Interior blank lines and
@@ -149,6 +171,322 @@ fn section_text(section: &str) -> &str {
             Some(s) => s,
             None => section,
         },
+    }
+}
+
+fn into_body(err: Error) -> Error {
+    match err.kind() {
+        ErrorKind::Body | ErrorKind::FormatDisabled | ErrorKind::Syntax => err,
+        _ => Error::body(err),
+    }
+}
+
+struct RootDe {
+    fields: Map<String, Value>,
+    body_fields: &'static [&'static str],
+    slots: Vec<SectionSlot>,
+    format: Format,
+}
+
+impl<'de> Deserializer<'de> for RootDe {
+    type Error = Error;
+
+    fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        self.deserialize_map(visitor)
+    }
+
+    fn deserialize_map<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        visitor.visit_map(RootMap::new(self))
+    }
+
+    fn deserialize_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        _fields: &'static [&'static str],
+        visitor: V,
+    ) -> Result<V::Value, Error> {
+        self.deserialize_map(visitor)
+    }
+
+    fn deserialize_ignored_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        visitor.visit_unit()
+    }
+
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf option unit unit_struct newtype_struct seq tuple
+        tuple_struct enum identifier
+    }
+}
+
+enum Pending {
+    Front(String),
+    Body { name: &'static str, index: usize },
+}
+
+struct RootMap {
+    fields: Map<String, Value>,
+    slots: Vec<SectionSlot>,
+    format: Format,
+    pending: vec::IntoIter<Pending>,
+    current: Option<Pending>,
+}
+
+impl RootMap {
+    fn new(root: RootDe) -> Self {
+        let mut pending = Vec::with_capacity(root.fields.len() + root.body_fields.len());
+        for key in root.fields.keys() {
+            if !root.body_fields.contains(&key.as_str()) {
+                pending.push(Pending::Front(key.clone()));
+            }
+        }
+        for (index, name) in root.body_fields.iter().enumerate() {
+            pending.push(Pending::Body { name, index });
+        }
+        Self {
+            fields: root.fields,
+            slots: root.slots,
+            format: root.format,
+            pending: pending.into_iter(),
+            current: None,
+        }
+    }
+}
+
+impl<'de> MapAccess<'de> for RootMap {
+    type Error = Error;
+
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Error>
+    where
+        K: DeserializeSeed<'de>,
+    {
+        match self.pending.next() {
+            None => Ok(None),
+            Some(Pending::Front(key)) => {
+                self.current = Some(Pending::Front(key.clone()));
+                seed.deserialize(StringDeserializer::<Error>::new(key))
+                    .map(Some)
+            }
+            Some(Pending::Body { name, index }) => {
+                self.current = Some(Pending::Body { name, index });
+                seed.deserialize(StrDeserializer::<Error>::new(name))
+                    .map(Some)
+            }
+        }
+    }
+
+    fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Error>
+    where
+        V: DeserializeSeed<'de>,
+    {
+        match self.current.take() {
+            Some(Pending::Front(key)) => {
+                let value = self.fields.remove(&key).unwrap_or(Value::Null);
+                seed.deserialize(JsonDe(value))
+            }
+            Some(Pending::Body { index, .. }) => {
+                let slot = self
+                    .slots
+                    .get(index)
+                    .cloned()
+                    .unwrap_or(SectionSlot::Absent);
+                seed.deserialize(SectionDeserializer {
+                    slot,
+                    format: self.format,
+                })
+            }
+            None => Err(Error::type_error("value is missing")),
+        }
+    }
+}
+
+struct SectionDeserializer {
+    slot: SectionSlot,
+    format: Format,
+}
+
+impl SectionDeserializer {
+    fn parsed(self) -> Result<JsonDe, Error> {
+        match self.slot {
+            SectionSlot::Absent => Err(Error::body("missing section")),
+            SectionSlot::Empty => Err(Error::body("empty section for required structured field")),
+            SectionSlot::Text(text) => Ok(JsonDe(format::load_body(&text, self.format)?)),
+        }
+    }
+}
+
+impl<'de> Deserializer<'de> for SectionDeserializer {
+    type Error = Error;
+
+    fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        self.parsed()?.deserialize_any(visitor).map_err(into_body)
+    }
+
+    fn deserialize_str<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        self.deserialize_string(visitor)
+    }
+
+    fn deserialize_string<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        match self.slot {
+            SectionSlot::Absent => Err(Error::body("missing section")),
+            SectionSlot::Empty => visitor.visit_string(String::new()),
+            SectionSlot::Text(text) if text == EMPTY_STRING_SECTION => {
+                visitor.visit_string(String::new())
+            }
+            SectionSlot::Text(text) => visitor.visit_string(text),
+        }
+    }
+
+    fn deserialize_bytes<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        self.deserialize_byte_buf(visitor)
+    }
+
+    fn deserialize_byte_buf<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        match self.slot {
+            SectionSlot::Absent => Err(Error::body("missing section")),
+            SectionSlot::Empty => visitor.visit_byte_buf(Vec::new()),
+            SectionSlot::Text(text) if text == EMPTY_STRING_SECTION => {
+                visitor.visit_byte_buf(Vec::new())
+            }
+            SectionSlot::Text(text) => visitor.visit_byte_buf(text.into_bytes()),
+        }
+    }
+
+    fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        match self.slot {
+            SectionSlot::Absent | SectionSlot::Empty => visitor.visit_none(),
+            SectionSlot::Text(_) => visitor.visit_some(self),
+        }
+    }
+
+    fn deserialize_ignored_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        visitor.visit_unit()
+    }
+
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char unit unit_struct
+        seq tuple tuple_struct map struct enum newtype_struct identifier
+    }
+}
+
+struct JsonDe(Value);
+
+fn visit_number<'de, V: Visitor<'de>>(
+    n: serde_json::Number,
+    visitor: V,
+) -> Result<V::Value, Error> {
+    if let Some(i) = n.as_i64() {
+        visitor.visit_i64(i)
+    } else if let Some(u) = n.as_u64() {
+        visitor.visit_u64(u)
+    } else if let Some(f) = n.as_f64() {
+        visitor.visit_f64(f)
+    } else {
+        Err(Error::type_error(format!("invalid number: {n}")))
+    }
+}
+
+impl<'de> Deserializer<'de> for JsonDe {
+    type Error = Error;
+
+    fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        match self.0 {
+            Value::Null => visitor.visit_unit(),
+            Value::Bool(b) => visitor.visit_bool(b),
+            Value::Number(n) => visit_number(n, visitor),
+            Value::String(s) => visitor.visit_string(s),
+            Value::Array(arr) => visitor.visit_seq(JsonSeq {
+                iter: arr.into_iter(),
+            }),
+            Value::Object(map) => visitor.visit_map(JsonMap {
+                iter: map.into_iter(),
+                next_value: None,
+            }),
+        }
+    }
+
+    fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        match self.0 {
+            Value::Null => visitor.visit_none(),
+            _ => visitor.visit_some(self),
+        }
+    }
+
+    fn deserialize_ignored_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        visitor.visit_unit()
+    }
+
+    fn deserialize_unit<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        match self.0 {
+            Value::Null => visitor.visit_unit(),
+            other => JsonDe(other).deserialize_any(visitor),
+        }
+    }
+
+    fn deserialize_newtype_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, Error> {
+        visitor.visit_newtype_struct(self)
+    }
+
+    serde::forward_to_deserialize_any! {
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
+        bytes byte_buf unit_struct seq tuple tuple_struct map struct enum
+        identifier
+    }
+}
+
+struct JsonSeq {
+    iter: vec::IntoIter<Value>,
+}
+
+impl<'de> SeqAccess<'de> for JsonSeq {
+    type Error = Error;
+
+    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Error>
+    where
+        T: DeserializeSeed<'de>,
+    {
+        match self.iter.next() {
+            Some(value) => seed.deserialize(JsonDe(value)).map(Some),
+            None => Ok(None),
+        }
+    }
+}
+
+struct JsonMap {
+    iter: <Map<String, Value> as IntoIterator>::IntoIter,
+    next_value: Option<Value>,
+}
+
+impl<'de> MapAccess<'de> for JsonMap {
+    type Error = Error;
+
+    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Error>
+    where
+        K: DeserializeSeed<'de>,
+    {
+        match self.iter.next() {
+            Some((key, value)) => {
+                self.next_value = Some(value);
+                seed.deserialize(StringDeserializer::<Error>::new(key))
+                    .map(Some)
+            }
+            None => Ok(None),
+        }
+    }
+
+    fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Error>
+    where
+        V: DeserializeSeed<'de>,
+    {
+        let value = self
+            .next_value
+            .take()
+            .ok_or_else(|| Error::type_error("value is missing"))?;
+        seed.deserialize(JsonDe(value))
     }
 }
 
@@ -381,6 +719,42 @@ mod tests {
         let input = "```yaml\ntitle: t\n```\n---\n";
         let err = from_str::<types::Article>(input).expect_err("empty structured");
         assert_eq!(err.kind(), ErrorKind::Body);
+        assert!(std::error::Error::source(&err).is_none());
+    }
+
+    #[test]
+    fn structured_decoder_failure_is_body_with_source() {
+        let input = "```yaml\ntitle: Hello\n```\n:\n";
+        let err = from_str::<types::Article>(input).expect_err("bad structured yaml");
+        assert_eq!(err.kind(), ErrorKind::Body);
+        assert!(std::error::Error::source(&err).is_some());
+    }
+
+    #[test]
+    fn nested_fenced_yaml_golden() {
+        let got: types::NestedFields = from_str(goldens::NESTED_FENCED_YAML).expect("nested");
+        assert_eq!(got, values::nested());
+    }
+
+    #[test]
+    fn structured_fenced_yaml_golden() {
+        let got: types::Article = from_str(goldens::STRUCTURED_FENCED_YAML).expect("structured");
+        assert_eq!(got, values::article());
+    }
+
+    #[test]
+    fn names_fenced_yaml_golden() {
+        let got: types::JsonNames = from_str(goldens::NAMES_FENCED_YAML).expect("names");
+        assert_eq!(got, values::json_names());
+    }
+
+    #[test]
+    fn whitespace_unicode_golden_keeps_interiors() {
+        let got: types::Page = from_str(goldens::WHITESPACE_UNICODE).expect("whitespace");
+        assert_eq!(got, values::whitespace_page());
+        assert!(got.text1.contains("spaces   \n"), "{:?}", got.text1);
+        assert!(got.text1.contains("🦀"), "{:?}", got.text1);
+        assert!(got.text1.contains("Ещё"), "{:?}", got.text1);
     }
 
     #[test]

@@ -163,6 +163,19 @@ pub fn optional_empty_string_generated() -> OptionalBody {
         .with_middle("")
 }
 
+pub fn whitespace_page() -> types::Page {
+    types::Page {
+        text1: concat!(
+            "Line with trailing spaces   \n",
+            "and a blank line in between.\n",
+            "\n",
+            "Ещё кириллица и emoji 🦀."
+        )
+        .into(),
+        ..page()
+    }
+}
+
 pub fn json_names() -> types::JsonNames {
     types::JsonNames {
         published_at: PUBLISHED_RFC3339.into(),
