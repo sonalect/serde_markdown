@@ -53,6 +53,9 @@ API changes bump the minor.
   `FieldsLayout` (`Fenced` default / `Bare`), and the `Markdown` trait
   (`BODY_FIELDS`). Round-trip `to_string` / `from_str` are not in this
   crate yet.
+- `#[derive(Markdown)]` and `#[markdown(body)]` via workspace crate
+  `serde_markdown_derive`, re-exported behind the `derive` feature (on by
+  default). Emitted `BODY_FIELDS` uses Serde field names after `rename`.
 
 ### Changed
 

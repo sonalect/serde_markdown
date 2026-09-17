@@ -9,7 +9,16 @@ rust_library(
         ["testdata/markdown/**/*.md"],
         allow_empty = True,
     ),
+    crate_features = [
+        "derive",
+        "json",
+        "toml",
+        "yaml",
+    ],
     crate_name = "serde_markdown",
+    proc_macro_deps = [
+        "//rust/serde_markdown_derive",
+    ],
     visibility = ["//visibility:public"],
     deps = [
         "@cargo//:pulldown-cmark",
@@ -27,6 +36,15 @@ rust_test(
         allow_empty = True,
     ),
     crate = ":serde_markdown",
+    crate_features = [
+        "derive",
+        "json",
+        "toml",
+        "yaml",
+    ],
+    proc_macro_deps = [
+        "//rust/serde_markdown_derive",
+    ],
     visibility = ["//rust:__pkg__"],
     deps = [
         "//rust/generated",

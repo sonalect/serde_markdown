@@ -1,0 +1,15 @@
+load("@rules_rust//rust:defs.bzl", "rust_proc_macro")
+
+exports_files(["Cargo.toml"])
+
+rust_proc_macro(
+    name = "serde_markdown_derive",
+    srcs = glob(["src/**/*.rs"]),
+    crate_name = "serde_markdown_derive",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@cargo//:proc-macro2",
+        "@cargo//:quote",
+        "@cargo//:syn",
+    ],
+)

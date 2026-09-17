@@ -8,6 +8,9 @@
 /// Path of the design document in the repository root.
 pub const DESIGN: &str = "DESIGN.md";
 
+#[cfg(test)]
+extern crate self as serde_markdown;
+
 mod de;
 mod error;
 mod format;
@@ -18,6 +21,8 @@ mod ser;
 pub use error::{Error, ErrorKind};
 pub use format::{FieldsLayout, Format};
 pub use markdown::Markdown;
+#[cfg(feature = "derive")]
+pub use serde_markdown_derive::Markdown;
 
 #[cfg(test)]
 mod testdata;
@@ -45,6 +50,15 @@ mod testdata_smoke {
             ["first", "middle", "last"]
         );
         assert_eq!(types::JsonNames::BODY_FIELDS, ["bodyNote"]);
+        assert!(
+            !types::JsonNames::BODY_FIELDS.contains(&"body_note"),
+            "BODY_FIELDS must use the Serde name after rename, not the Rust ident"
+        );
+        assert!(
+            !types::JsonNames::BODY_FIELDS.contains(&"published_at")
+                && !types::JsonNames::BODY_FIELDS.contains(&"publishedAt"),
+            "front-matter rename must not appear in BODY_FIELDS"
+        );
         assert_eq!(types::Article::BODY_FIELDS, ["note"]);
         assert_eq!(types::WellKnown::BODY_FIELDS, ["occurredAt", "pause"]);
         assert_eq!(types::Proto3Page::BODY_FIELDS, ["body"]);

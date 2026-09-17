@@ -9,15 +9,17 @@ description = "Serde format crate: Rust structs to and from Markdown documents"
 readme = "../../README.md"
 
 [features]
-default = ["yaml", "json", "toml"]
+default = ["yaml", "json", "toml", "derive"]
 yaml = ["dep:yaml_serde"]
 json = ["dep:serde_json"]
 toml = ["dep:toml"]
+derive = ["dep:serde_markdown_derive"]
 
 [dependencies]
 pulldown-cmark = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
+serde_markdown_derive = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
 yaml_serde = { workspace = true, optional = true }
 

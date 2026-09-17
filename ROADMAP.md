@@ -59,7 +59,7 @@ not use it yet; wiring is M5.
 | [M1](#m1-skeleton) | done | Bazel/Buf, `options.proto`, testdata, stub crate |
 | [M2](#m2-parse) | done | `parse.rs`; CommonMark split; sniff; prefix |
 | [M3](#m3-error-format-markdown-trait) | done | `Error`, `Format`, `FieldsLayout`, `Markdown` |
-| [M4](#m4-derive) | not started | `#[derive(Markdown)]` / `#[markdown(body)]` |
+| [M4](#m4-derive) | done | `#[derive(Markdown)]` / `#[markdown(body)]` |
 | [M5](#m5-yaml-fenced) | not started | `to_string` / `from_str` YAML fenced, hand-written |
 | [M6](#m6-document-shapes) | not started | Bare, unlabeled, prefix, body-only, fence-not-first |
 | [M7](#m7-json-toml-bare-serialize) | not started | JSON/TOML features; `FieldsLayout::Bare` |
@@ -335,21 +335,21 @@ Close only after M2.
 
 ## M4. Derive
 
-**Status:** not started
+**Status:** done
 
 **Codes:** DESIGN.md §3.1.
 
 Close only after M3. Ser/de may still use a manual `Markdown` impl until
 M5. Do not parse proto options here (M11).
 
-- [ ] Workspace crate `serde_markdown_derive` with
+- [x] Workspace crate `serde_markdown_derive` with
       `#[derive(Markdown)]` and `#[markdown(body)]`.
-- [ ] Emitted `BODY_FIELDS` uses the **Serde field name** (after
+- [x] Emitted `BODY_FIELDS` uses the **Serde field name** (after
       `rename`). A compile-fail or unit test covers `publishedAt` vs
       `published_at` (`types::JsonNames`).
-- [ ] Feature `derive` on `serde_markdown` (DESIGN.md §5.1). Default
+- [x] Feature `derive` on `serde_markdown` (DESIGN.md §5.1). Default
       features may include it; Bazel still links it.
-- [ ] `bazel test //...` green. Owner has reviewed the diff.
+- [x] `bazel test //...` green. Owner has reviewed the diff.
 
 **Review:** derive crate. Stop.
 

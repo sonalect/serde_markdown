@@ -10,6 +10,7 @@ rust_clippy_test(
         "//rust/generated:generated_test",
         "//rust/serde_markdown:serde_markdown",
         "//rust/serde_markdown:serde_markdown_test",
+        "//rust/serde_markdown_derive:serde_markdown_derive",
     ],
 )
 
