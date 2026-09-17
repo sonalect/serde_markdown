@@ -61,7 +61,7 @@ not use it yet; wiring is M5.
 | [M3](#m3-error-format-markdown-trait) | done | `Error`, `Format`, `FieldsLayout`, `Markdown` |
 | [M4](#m4-derive) | done | `#[derive(Markdown)]` / `#[markdown(body)]` |
 | [M5](#m5-yaml-fenced) | done | `to_string` / `from_str` YAML fenced, hand-written |
-| [M6](#m6-document-shapes) | not started | Bare, unlabeled, prefix, body-only, fence-not-first |
+| [M6](#m6-document-shapes) | done | Bare, unlabeled, prefix, body-only, fence-not-first |
 | [M7](#m7-json-toml-bare-serialize) | not started | JSON/TOML features; `FieldsLayout::Bare` |
 | [M8](#m8-option-and-presence) | not started | Trailing vs middle `None`; `Some("")` |
 | [M9](#m9-nested-structured-names-whitespace) | not started | Nested fields, structured body, rename, whitespace |
@@ -385,26 +385,26 @@ Close only after M4. Hand-written structs only. Default serialize:
 
 ## M6. Document shapes
 
-**Status:** not started
+**Status:** done
 
 **Codes:** DESIGN.md §2.4–2.6.
 
 Close only after M5. Deserialize the rest of the Page-shaped goldens.
 Serialize may still be fenced YAML.
 
-- [ ] Bare YAML/JSON/TOML first slice that is a mapping is fields
+- [x] Bare YAML/JSON/TOML first slice that is a mapping is fields
       (`page.bare.yaml.md`, `page.bare.json.md`, `page.bare.toml.md`).
-- [ ] Unlabeled first fence sniffs (`page.unlabeled.yaml.md`,
+- [x] Unlabeled first fence sniffs (`page.unlabeled.yaml.md`,
       `.json.md`, `.toml.md`). Sniffed JSON/TOML parse failure is
       `FrontMatter`, not a fallback to YAML.
-- [ ] Leading whitespace / `---` prefix is ignored
+- [x] Leading whitespace / `---` prefix is ignored
       (`page.leading_prefix.md`).
-- [ ] First slice that is not a mapping is body-only
+- [x] First slice that is not a mapping is body-only
       (`body_only.two_sections.md`). Prose then a later ` ```yaml ` is
       body (`page.fence_not_first.md`): that fence is not fields.
-- [ ] `page.split.*` round-trip as one first body section plus
+- [x] `page.split.*` round-trip as one first body section plus
       appendix (split behaviour from M2, now through `from_str`).
-- [ ] `bazel test //...` green. Owner has reviewed the diff.
+- [x] `bazel test //...` green. Owner has reviewed the diff.
 
 **Review:** document shapes. Stop.
 

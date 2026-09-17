@@ -56,6 +56,12 @@ API changes bump the minor.
   labeled `yaml` fence plus raw `String` body sections (`yml` is accepted
   on input). Fields-only documents omit the body. Serialize need not be
   byte-identical to a golden; `from_str(to_string(x)) == x` holds.
+- `from_str` also reads the rest of the Page-shaped documents: bare
+  YAML/JSON/TOML mappings, unlabeled first fences (sniffed; a sniffed JSON
+  or TOML failure is `FrontMatter`, not a YAML fallback), a discarded
+  leading whitespace/`---` prefix, body-only when the first slice is not a
+  mapping, and `page.split.*` as one first body section plus appendix. A
+  later fenced `yaml` block is body, not fields.
 - `#[derive(Markdown)]` and `#[markdown(body)]` via workspace crate
   `serde_markdown_derive`, re-exported behind the `derive` feature (on by
   default). Emitted `BODY_FIELDS` uses Serde field names after `rename`.
