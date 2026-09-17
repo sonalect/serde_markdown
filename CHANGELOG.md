@@ -51,8 +51,11 @@ API changes bump the minor.
   `kind()`; `Syntax` carries a byte offset; decoder and I/O failures are
   `source()`), `Format` (`Yaml` default / `Json` / `Toml`),
   `FieldsLayout` (`Fenced` default / `Bare`), and the `Markdown` trait
-  (`BODY_FIELDS`). Round-trip `to_string` / `from_str` are not in this
-  crate yet.
+  (`BODY_FIELDS`).
+- `to_string` / `from_str` for hand-written structs: default serialize is a
+  labeled `yaml` fence plus raw `String` body sections (`yml` is accepted
+  on input). Fields-only documents omit the body. Serialize need not be
+  byte-identical to a golden; `from_str(to_string(x)) == x` holds.
 - `#[derive(Markdown)]` and `#[markdown(body)]` via workspace crate
   `serde_markdown_derive`, re-exported behind the `derive` feature (on by
   default). Emitted `BODY_FIELDS` uses Serde field names after `rename`.

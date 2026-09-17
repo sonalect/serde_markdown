@@ -60,7 +60,7 @@ not use it yet; wiring is M5.
 | [M2](#m2-parse) | done | `parse.rs`; CommonMark split; sniff; prefix |
 | [M3](#m3-error-format-markdown-trait) | done | `Error`, `Format`, `FieldsLayout`, `Markdown` |
 | [M4](#m4-derive) | done | `#[derive(Markdown)]` / `#[markdown(body)]` |
-| [M5](#m5-yaml-fenced) | not started | `to_string` / `from_str` YAML fenced, hand-written |
+| [M5](#m5-yaml-fenced) | done | `to_string` / `from_str` YAML fenced, hand-written |
 | [M6](#m6-document-shapes) | not started | Bare, unlabeled, prefix, body-only, fence-not-first |
 | [M7](#m7-json-toml-bare-serialize) | not started | JSON/TOML features; `FieldsLayout::Bare` |
 | [M8](#m8-option-and-presence) | not started | Trailing vs middle `None`; `Some("")` |
@@ -357,7 +357,7 @@ M5. Do not parse proto options here (M11).
 
 ## M5. YAML fenced
 
-**Status:** not started
+**Status:** done
 
 **Codes:** DESIGN.md §2.1, §4.1–4.2, §5 `to_string` / `from_str`, §6.3,
 §8.
@@ -365,19 +365,19 @@ M5. Do not parse proto options here (M11).
 Close only after M4. Hand-written structs only. Default serialize:
 `Format::Yaml` + `FieldsLayout::Fenced`.
 
-- [ ] `to_string` / `from_str` exist. `from_str(to_string(x)) == x` for
+- [x] `to_string` / `from_str` exist. `from_str(to_string(x)) == x` for
       `types::Page` without `published` (`page.fenced.yaml.md` as
       deserialize input; serialize need not be byte-identical).
-- [ ] Fence language on serialize is labeled `yaml`. One newline after
+- [x] Fence language on serialize is labeled `yaml`. One newline after
       the closing fence; separator `\n---\n`; trailing newline at EOF;
       no leading blank line; no trailing `---` after the last section
       (DESIGN.md §8).
-- [ ] Body `String` sections are raw (no extra quotes). Front-matter
+- [x] Body `String` sections are raw (no extra quotes). Front-matter
       keys are Serde names. `yml` as a deserialize tag is accepted
       (`page.fenced.yml.md`).
-- [ ] Fields-only document omits body (`fields_only.fenced.yaml.md`).
+- [x] Fields-only document omits body (`fields_only.fenced.yaml.md`).
       All-body with a fence is not this stage.
-- [ ] `bazel test //...` green. Owner has reviewed the diff.
+- [x] `bazel test //...` green. Owner has reviewed the diff.
 
 **Review:** YAML fenced round-trip. Stop.
 

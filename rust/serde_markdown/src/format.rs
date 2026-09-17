@@ -1,9 +1,13 @@
 //! Fence language and fields-block layout used when serializing.
 //!
 //! [`Format`] and [`FieldsLayout`] live here. Dump and load of the fields
-//! intermediate representation is not implemented in this file yet.
+//! intermediate representation (a JSON value) go through the fence language.
 
 use std::fmt;
+
+use serde_json::Value;
+
+use crate::error::Error;
 
 /// Fence language used when serializing the fields block.
 ///
@@ -37,6 +41,76 @@ impl fmt::Display for Format {
             Self::Json => "json",
             Self::Toml => "toml",
         })
+    }
+}
+
+/// Encode a fields mapping in `format`.
+pub(crate) fn dump(value: &Value, format: Format) -> Result<String, Error> {
+    match format {
+        Format::Yaml => dump_yaml(value),
+        Format::Json | Format::Toml => {
+            let _ = value;
+            Err(Error::type_error(
+                "only fenced YAML serialize is implemented",
+            ))
+        }
+    }
+}
+
+/// Decode a fields slice in `format` to a JSON value.
+pub(crate) fn load(src: &str, format: Format) -> Result<Value, Error> {
+    match format {
+        Format::Yaml => load_yaml(src),
+        Format::Json => load_json(src),
+        Format::Toml => load_toml(src),
+    }
+}
+
+fn dump_yaml(value: &Value) -> Result<String, Error> {
+    #[cfg(feature = "yaml")]
+    {
+        yaml_serde::to_string(value).map_err(Error::type_error)
+    }
+    #[cfg(not(feature = "yaml"))]
+    {
+        let _ = value;
+        Err(Error::format_disabled(Format::Yaml))
+    }
+}
+
+fn load_yaml(src: &str) -> Result<Value, Error> {
+    #[cfg(feature = "yaml")]
+    {
+        yaml_serde::from_str(src).map_err(Error::front_matter)
+    }
+    #[cfg(not(feature = "yaml"))]
+    {
+        let _ = src;
+        Err(Error::format_disabled(Format::Yaml))
+    }
+}
+
+fn load_json(src: &str) -> Result<Value, Error> {
+    #[cfg(feature = "json")]
+    {
+        serde_json::from_str(src).map_err(Error::front_matter)
+    }
+    #[cfg(not(feature = "json"))]
+    {
+        let _ = src;
+        Err(Error::format_disabled(Format::Json))
+    }
+}
+
+fn load_toml(src: &str) -> Result<Value, Error> {
+    #[cfg(feature = "toml")]
+    {
+        toml::from_str(src).map_err(Error::front_matter)
+    }
+    #[cfg(not(feature = "toml"))]
+    {
+        let _ = src;
+        Err(Error::format_disabled(Format::Toml))
     }
 }
 

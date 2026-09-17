@@ -18,9 +18,11 @@ mod markdown;
 mod parse;
 mod ser;
 
+pub use de::from_str;
 pub use error::{Error, ErrorKind};
 pub use format::{FieldsLayout, Format};
 pub use markdown::Markdown;
+pub use ser::to_string;
 #[cfg(feature = "derive")]
 pub use serde_markdown_derive::Markdown;
 

@@ -1,9 +1,7 @@
 //! CommonMark split of a Markdown document into a fields slice and body sections.
 //!
 //! This module does **not** parse YAML, JSON, or TOML. Unlabeled fences and
-//! bare first slices only get a sniff hint (DESIGN.md §2.6).
-
-#![allow(dead_code)] // Wired into ser/de in M5.
+//! bare first slices only get a sniff hint.
 
 use std::ops::Range;
 
@@ -166,6 +164,14 @@ fn is_dash_thematic_break(src: &str) -> bool {
     dashes >= 3
 }
 
+fn skip_one_line_ending(input: &str, pos: usize) -> usize {
+    match input.as_bytes().get(pos..) {
+        Some([b'\r', b'\n', ..]) => pos + 2,
+        Some([b'\n', ..] | [b'\r', ..]) => pos + 1,
+        _ => pos,
+    }
+}
+
 fn skip_ws(input: &str, mut pos: usize) -> usize {
     while pos < input.len() {
         let ch = input[pos..].chars().next();
@@ -228,7 +234,8 @@ fn leading_fields_fence(
                 labeled,
                 sniff,
                 inner,
-                body_start: range.end,
+                // The closing fence line's terminator is not body text.
+                body_start: skip_one_line_ending(input, range.end),
             });
         }
         nest += nest_delta(event);
@@ -412,6 +419,11 @@ mod tests {
         assert_eq!(sniff, Sniff::Yaml);
         assert!(inner.contains("field1: foo"));
         assert_eq!(doc.body.len(), 2);
+        assert!(
+            !doc.body[0].starts_with('\n'),
+            "newline after the closing fence is not body: {:?}",
+            doc.body[0]
+        );
         assert_eq!(doc.body[0].trim(), "Text1 bla bla bla");
         assert_eq!(doc.body[1].trim(), "Text2 bal bla bla");
     }
