@@ -258,10 +258,13 @@ Algorithm:
    top-level dash `---` (or EOF) is a fields candidate. Sniff (§2.6). Mapping
    → fields; otherwise that text starts the body (§2.4).
 6. **Body:** everything after a recognized fields block. Split on remaining
-   top-level dash `---` rules (`Event::Rule` whose source is a dash thematic
-   break: 0–3 spaces indent, three or more `-`, optional spaces between
-   markers). Breaks inside fences, lists, quotes, or tables are ordinary
-   content. Leading `---` skipped in step 3 are not body separators.
+   top-level dash `---` rules. That is `Event::Rule` whose source is a dash
+   thematic break (0–3 spaces indent, three or more `-`, optional spaces
+   between markers), **and** a top-level setext H2 underline of dashes: a
+   paragraph followed immediately by `---` is a CommonMark setext heading,
+   not `Event::Rule`. ATX headings (`## …`) and `===` setext H1 underlines
+   are not separators. Breaks inside fences, lists, quotes, or tables are
+   ordinary content. Leading `---` skipped in step 3 are not body separators.
 7. `***` and `___` thematic breaks are **not** section separators. They stay
    inside a section so authors can still draw a visual `<hr>` without starting
    a new field.

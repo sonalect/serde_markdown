@@ -5,8 +5,8 @@ Version 0.1, 17 September 2026.
 Work order so the crate `serde_markdown` implements [DESIGN.md](DESIGN.md).
 The mapping is already locked: optional first fields block (fenced or
 bare YAML/JSON/TOML), then body sections split on top-level `---`,
-body fields marked explicitly. M0–M1 are done. This file remains the
-work order for M2–M14.
+body fields marked explicitly. M0–M2 are done. This file remains the
+work order for M3–M14.
 
 This is not a 1.0 release plan. v1 is 0.x. Compatible additions bump
 the patch; breaking API changes bump the minor ([CHANGELOG.md](CHANGELOG.md)).
@@ -57,7 +57,7 @@ not use it yet; wiring is M5.
 | ----- | ------ | ----------- |
 | [M0](#m0-charter) | done | This file; DESIGN.md is the spec |
 | [M1](#m1-skeleton) | done | Bazel/Buf, `options.proto`, testdata, stub crate |
-| [M2](#m2-parse) | not started | `parse.rs`; CommonMark split; sniff; prefix |
+| [M2](#m2-parse) | done | `parse.rs`; CommonMark split; sniff; prefix |
 | [M3](#m3-error-format-markdown-trait) | not started | `Error`, `Format`, `FieldsLayout`, `Markdown` |
 | [M4](#m4-derive) | not started | `#[derive(Markdown)]` / `#[markdown(body)]` |
 | [M5](#m5-yaml-fenced) | not started | `to_string` / `from_str` YAML fenced, hand-written |
@@ -174,7 +174,7 @@ DESIGN.md §6.5.
 
 ## M2. Parse
 
-**Status:** not started
+**Status:** done
 
 **Codes:** DESIGN.md §2.5–2.7, §6 (`parse.rs`).
 
@@ -184,27 +184,27 @@ deserialize YAML/JSON/TOML in this stage.
 Recommended files: `src/parse.rs`. Tests may `include_str!` the goldens
 already in `testdata/markdown/`.
 
-- [ ] `OffsetIter` over `pulldown-cmark` events. Track block nesting
+- [x] `OffsetIter` over `pulldown-cmark` events. Track block nesting
       (blockquote, list, item, table, footnote).
-- [ ] Leading Unicode whitespace and top-level dash `---` are discarded
+- [x] Leading Unicode whitespace and top-level dash `---` are discarded
       (`page.leading_prefix.md`). They are not a body section.
-- [ ] First top-level fenced code block whose info string (trimmed,
+- [x] First top-level fenced code block whose info string (trimmed,
       case-insensitive, first token) is `yaml` / `yml` / `json` /
       `toml` or empty is the fields fence. Any other info string is
       not fields (`page.fence_not_first.md`).
-- [ ] Unlabeled first fence and a bare first slice report a sniff
+- [x] Unlabeled first fence and a bare first slice report a sniff
       hint: `{` / `[` → JSON; TOML-shaped first line → TOML; else YAML
       (DESIGN.md §2.6). Empty fence inner text → YAML. Do not run the
       YAML/JSON/TOML parsers yet.
-- [ ] If there is no fields fence, the text until the next top-level
+- [x] If there is no fields fence, the text until the next top-level
       dash `---` (or EOF) is a bare-fields candidate. Mapping vs not is
       M6; this stage only yields the slice.
-- [ ] Body splits on remaining top-level dash `---` only.
+- [x] Body splits on remaining top-level dash `---` only.
       `page.split.fence.md`: `---` inside a fence does not split.
       `page.split.stars.md`: `***` / `___` do not split.
       `page.split.list.md`: `---` inside a list item does not split.
-- [ ] Public parse type is crate-private unless rustdoc in M12 needs it.
-- [ ] `bazel test //...` green. Owner has reviewed the diff.
+- [x] Public parse type is crate-private unless rustdoc in M12 needs it.
+- [x] `bazel test //...` green. Owner has reviewed the diff.
 
 **Review:** split tests. Stop. Do not call `yaml_serde` in this stage.
 

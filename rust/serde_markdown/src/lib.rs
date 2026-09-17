@@ -6,6 +6,8 @@
 /// Path of the design document in the repository root.
 pub const DESIGN: &str = "DESIGN.md";
 
+mod parse;
+
 #[cfg(test)]
 mod testdata;
 

@@ -28,6 +28,10 @@ API changes bump the minor.
   `proto/markdown/testdata/`, golden Markdown in
   `rust/serde_markdown/testdata/markdown/`, and matching hand-written
   Rust structs in `rust/serde_markdown/src/testdata/`.
+- Crate-private CommonMark split (`rust/serde_markdown/src/parse.rs`):
+  fields fence or bare first slice, sniff hint without YAML/JSON/TOML
+  parsers, body sections on top-level dash `---` (including setext H2
+  underlines; not `***` / `___`, not `---` inside fences or lists).
 - Implementation work order [`ROADMAP.md`](ROADMAP.md) (M0–M14).
 - Bazel + Buf pipeline in the scheda shape: `buf_module`, lint, format,
   `buf.build/anthropics/buffa` plus `protoc-gen-buffa-packaging`,
