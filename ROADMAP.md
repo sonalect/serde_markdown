@@ -58,7 +58,7 @@ not use it yet; wiring is M5.
 | [M0](#m0-charter) | done | This file; DESIGN.md is the spec |
 | [M1](#m1-skeleton) | done | Bazel/Buf, `options.proto`, testdata, stub crate |
 | [M2](#m2-parse) | done | `parse.rs`; CommonMark split; sniff; prefix |
-| [M3](#m3-error-format-markdown-trait) | not started | `Error`, `Format`, `FieldsLayout`, `Markdown` |
+| [M3](#m3-error-format-markdown-trait) | done | `Error`, `Format`, `FieldsLayout`, `Markdown` |
 | [M4](#m4-derive) | not started | `#[derive(Markdown)]` / `#[markdown(body)]` |
 | [M5](#m5-yaml-fenced) | not started | `to_string` / `from_str` YAML fenced, hand-written |
 | [M6](#m6-document-shapes) | not started | Bare, unlabeled, prefix, body-only, fence-not-first |
@@ -304,30 +304,30 @@ already in `testdata/markdown/`.
 
 ## M3. Error, Format, Markdown trait
 
-**Status:** not started
+**Status:** done
 
 **Codes:** DESIGN.md §5 (`Format`, `FieldsLayout`, `Markdown`), §7.
 
 Close only after M2.
 
-- [ ] Handwritten `Error` / `ErrorKind` in `error.rs` (no `thiserror`,
+- [x] Handwritten `Error` / `ErrorKind` in `error.rs` (no `thiserror`,
       no `anyhow`, not a proto message). Implements `std::error::Error`,
       `Display`, `serde::{ser,de}::Error` by hand. Kinds: `Syntax`,
       `FrontMatter`, `Body`, `Type`, `FormatDisabled`, `Io`. Callers
       match `kind()`. `Syntax` has a byte offset. `FrontMatter` and
       `Io` (and structured-body decoder failures under `Body`) set
       `source()`.
-- [ ] `Format` is `Yaml` (default) / `Json` / `Toml`.
+- [x] `Format` is `Yaml` (default) / `Json` / `Toml`.
       `FieldsLayout` is `Fenced` (default) / `Bare`.
-- [ ] `Markdown` trait: `const BODY_FIELDS: &'static [&'static str]`.
+- [x] `Markdown` trait: `const BODY_FIELDS: &'static [&'static str]`.
       Testdata hand-written types implement it (lists already in
       `src/testdata/types.rs`).
-- [ ] Root that is not a named struct is `Type` (tests may wait for
+- [x] Root that is not a named struct is `Type` (tests may wait for
       M5 if they need `to_string`).
-- [ ] Module layout matches DESIGN.md §6.4 for the files this stage
+- [x] Module layout matches DESIGN.md §6.4 for the files this stage
       adds (`error.rs`, `format.rs`, `markdown.rs`). `ser.rs` / `de.rs`
       may exist as stubs.
-- [ ] `bazel test //...` green. Owner has reviewed the diff.
+- [x] `bazel test //...` green. Owner has reviewed the diff.
 
 **Review:** public types without round-trip. Stop.
 

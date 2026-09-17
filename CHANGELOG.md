@@ -47,6 +47,12 @@ API changes bump the minor.
   block; JSON and TOML via `to_string_with_format`; bare (unfenced) fields
   via `FieldsLayout::Bare`. `Option` / proto presence in body sections from
   v1.
+- Public mapping-layer types: handwritten `Error` / `ErrorKind` (match
+  `kind()`; `Syntax` carries a byte offset; decoder and I/O failures are
+  `source()`), `Format` (`Yaml` default / `Json` / `Toml`),
+  `FieldsLayout` (`Fenced` default / `Bare`), and the `Markdown` trait
+  (`BODY_FIELDS`). Round-trip `to_string` / `from_str` are not in this
+  crate yet.
 
 ### Changed
 

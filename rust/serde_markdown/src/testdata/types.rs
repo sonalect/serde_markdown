@@ -1,12 +1,14 @@
 //! Hand-written structs that mirror `proto/markdown/testdata`.
 //!
-//! `BODY_FIELDS` lists Serde field names (after `rename`) in declaration
-//! order, the same contract `serde_markdown::Markdown` will use.
+//! [`Markdown::BODY_FIELDS`] lists Serde field names (after `rename`) in
+//! declaration order.
 
 use std::collections::BTreeMap;
 
 use buffa_types::google::protobuf::{Duration, Timestamp};
 use serde::{Deserialize, Serialize};
+
+use crate::Markdown;
 
 /// DESIGN.md §2 / §3.1 example (`markdown.testdata.Page`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -20,8 +22,8 @@ pub struct Page {
     pub appendix: String,
 }
 
-impl Page {
-    pub const BODY_FIELDS: &'static [&'static str] = &["text1", "appendix"];
+impl Markdown for Page {
+    const BODY_FIELDS: &'static [&'static str] = &["text1", "appendix"];
 }
 
 /// No body sections (`markdown.testdata.FieldsOnly`).
@@ -31,8 +33,8 @@ pub struct FieldsOnly {
     pub count: i32,
 }
 
-impl FieldsOnly {
-    pub const BODY_FIELDS: &'static [&'static str] = &[];
+impl Markdown for FieldsOnly {
+    const BODY_FIELDS: &'static [&'static str] = &[];
 }
 
 /// Body-only document (`markdown.testdata.BodyOnly`).
@@ -42,8 +44,8 @@ pub struct BodyOnly {
     pub text2: String,
 }
 
-impl BodyOnly {
-    pub const BODY_FIELDS: &'static [&'static str] = &["text1", "text2"];
+impl Markdown for BodyOnly {
+    const BODY_FIELDS: &'static [&'static str] = &["text1", "text2"];
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -60,8 +62,8 @@ pub struct NestedFields {
     pub body: String,
 }
 
-impl NestedFields {
-    pub const BODY_FIELDS: &'static [&'static str] = &["body"];
+impl Markdown for NestedFields {
+    const BODY_FIELDS: &'static [&'static str] = &["body"];
 }
 
 /// Presence matrix (`markdown.testdata.OptionalBody`).
@@ -73,8 +75,8 @@ pub struct OptionalBody {
     pub last: Option<String>,
 }
 
-impl OptionalBody {
-    pub const BODY_FIELDS: &'static [&'static str] = &["first", "middle", "last"];
+impl Markdown for OptionalBody {
+    const BODY_FIELDS: &'static [&'static str] = &["first", "middle", "last"];
 }
 
 /// Snake_case identifiers, camelCase Markdown keys (`markdown.testdata.JsonNames`).
@@ -86,8 +88,8 @@ pub struct JsonNames {
     pub body_note: String,
 }
 
-impl JsonNames {
-    pub const BODY_FIELDS: &'static [&'static str] = &["bodyNote"];
+impl Markdown for JsonNames {
+    const BODY_FIELDS: &'static [&'static str] = &["bodyNote"];
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -103,8 +105,8 @@ pub struct Article {
     pub note: Note,
 }
 
-impl Article {
-    pub const BODY_FIELDS: &'static [&'static str] = &["note"];
+impl Markdown for Article {
+    const BODY_FIELDS: &'static [&'static str] = &["note"];
 }
 
 /// WKT in fields and body (`markdown.testdata.WellKnown`).
@@ -120,8 +122,8 @@ pub struct WellKnown {
     pub pause: Duration,
 }
 
-impl WellKnown {
-    pub const BODY_FIELDS: &'static [&'static str] = &["occurredAt", "pause"];
+impl Markdown for WellKnown {
+    const BODY_FIELDS: &'static [&'static str] = &["occurredAt", "pause"];
 }
 
 /// proto3 `optional` body (`markdown.testdata.Proto3Page`).
@@ -131,6 +133,6 @@ pub struct Proto3Page {
     pub body: Option<String>,
 }
 
-impl Proto3Page {
-    pub const BODY_FIELDS: &'static [&'static str] = &["body"];
+impl Markdown for Proto3Page {
+    const BODY_FIELDS: &'static [&'static str] = &["body"];
 }

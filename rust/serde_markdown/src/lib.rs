@@ -1,18 +1,30 @@
 //! Serde format crate for Markdown documents with a structured fields fence
 //! and ordered body sections.
 //!
-//! Design: [`DESIGN.md`](https://github.com/sonalect/serde_markdown/blob/main/DESIGN.md).
+//! A root struct's non-body fields map to an optional first YAML, JSON, or
+//! TOML block (fenced or bare). Fields listed in [`Markdown::BODY_FIELDS`]
+//! map to body sections split on top-level `---`.
 
 /// Path of the design document in the repository root.
 pub const DESIGN: &str = "DESIGN.md";
 
+mod de;
+mod error;
+mod format;
+mod markdown;
 mod parse;
+mod ser;
+
+pub use error::{Error, ErrorKind};
+pub use format::{FieldsLayout, Format};
+pub use markdown::Markdown;
 
 #[cfg(test)]
 mod testdata;
 
 #[cfg(test)]
 mod testdata_smoke {
+    use super::Markdown;
     use super::testdata::{goldens, types, values};
 
     #[test]
