@@ -78,6 +78,9 @@ pub use serde_markdown_derive::Markdown;
 mod testdata;
 
 #[cfg(test)]
+mod acceptance;
+
+#[cfg(test)]
 mod testdata_smoke {
     use super::Markdown;
     use super::testdata::{goldens, types, values};

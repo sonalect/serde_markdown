@@ -96,6 +96,10 @@ API changes bump the minor.
   `from_str`. Invalid UTF-8 on `from_slice` is `Syntax` with a byte offset.
   Writer and reader failures are `Io`. A fence language not in compiled
   features remains `FormatDisabled`.
+- Golden acceptance walks every document in `testdata::goldens::ALL` (explicit
+  parse-only skip for split and fence-not-first files) and round-trips complete
+  `values::*` constructors through `from_str(to_string(x))`. A new golden that
+  is neither deserialized nor skipped fails the walker.
 
 ### Changed
 

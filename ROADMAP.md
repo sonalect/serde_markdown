@@ -5,8 +5,8 @@ Version 0.1, 17 September 2026.
 Work order so the crate `serde_markdown` implements [DESIGN.md](DESIGN.md).
 The mapping is already locked: optional first fields block (fenced or
 bare YAML/JSON/TOML), then body sections split on top-level `---`,
-body fields marked explicitly. M0–M13 are done. Remaining stage is
-M14.
+body fields marked explicitly. M0–M14 are done. There is no remaining M
+stage.
 
 This is not a 1.0 release plan. v1 is 0.x. Compatible additions bump
 the patch; breaking API changes bump the minor ([CHANGELOG.md](CHANGELOG.md)).
@@ -69,7 +69,7 @@ not use it yet; wiring is M5.
 | [M11](#m11-buffa-annotate) | done | `annotate_markdown_body`; generated messages |
 | [M12](#m12-io-and-features) | done | `to_vec` / `from_slice` / writer; feature matrix |
 | [M13](#m13-documents-once) | done | DESIGN, README, CHANGELOG, this dashboard |
-| [M14](#m14-acceptance) | not started | Golden round-trips; `bazel test //...` |
+| [M14](#m14-acceptance) | done | Golden round-trips; `bazel test //...` |
 
 ---
 
@@ -583,19 +583,19 @@ contradict the code. Do not polish twice.
 
 ## M14. Acceptance
 
-**Status:** not started
+**Status:** done
 
 Close only after M13.
 
-- [ ] Every golden in `testdata::goldens::ALL` that is a supported
+- [x] Every golden in `testdata::goldens::ALL` that is a supported
       round-trip deserializes to the matching `values::*` constructor
       (or an explicit skip list in the test for serialize-only /
       parse-only files, named in rustdoc).
-- [ ] `from_str(to_string(x)) == x` for the hand-written and generated
+- [x] `from_str(to_string(x)) == x` for the hand-written and generated
       constructors in `src/testdata/values.rs` that are complete values
       (not trailing-`None` serialize shapes already covered in M8).
-- [ ] `page.split.*` still do not split on inner `---` / `***` / lists.
-- [ ] `bazel test //...` green (includes `//rust:lint`,
+- [x] `page.split.*` still do not split on inner `---` / `***` / lists.
+- [x] `bazel test //...` green (includes `//rust:lint`,
       `//proto/markdown:lint`, `//proto/markdown:generate_test`,
       `//bazel:markdown`). Owner has reviewed the fixture tests.
 
