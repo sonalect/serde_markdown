@@ -9,8 +9,10 @@ use crate::markdown::Markdown;
 
 /// Serialize `value` as a fenced YAML Markdown document.
 ///
-/// The fields block is a labeled `yaml` fence. Body `String` fields are written
-/// as raw section text; nested objects and scalars use the fence-format dump.
+/// The fields block is a labeled `yaml` fence. Body `String` fields and types
+/// whose serde is a JSON string (well-known `Timestamp`, `Duration`,
+/// `FieldMask`) are written as raw section text; nested objects and scalars
+/// use the fence-format dump.
 /// Sections are joined with `\n---\n`. Trailing `None` body fields are omitted;
 /// a middle `None` is an empty section; `Some("")` is the two characters `""`.
 /// There is no leading blank line, one newline after the closing fence, a
@@ -286,7 +288,10 @@ fn render(
     for name in body_fields {
         slots.push(body_slot(captured.body.get(*name), format)?);
     }
-    while slots.pop_if(|slot| matches!(slot, BodySlot::Absent)).is_some() {}
+    while slots
+        .pop_if(|slot| matches!(slot, BodySlot::Absent))
+        .is_some()
+    {}
 
     for (i, slot) in slots.iter().enumerate() {
         let need_sep = i > 0 || (has_fields && layout == FieldsLayout::Bare);
@@ -640,6 +645,78 @@ mod tests {
         assert!(md.contains("spaces   \n"), "{md}");
         assert!(md.contains("🦀"), "{md}");
         let back: types::Page = crate::from_str(&md).expect("round-trip");
+        assert_eq!(value, back);
+    }
+
+    #[test]
+    fn well_known_round_trip() {
+        let value = values::well_known();
+        let from_golden: types::WellKnown =
+            crate::from_str(goldens::WELL_KNOWN_FENCED_YAML).expect("golden");
+        assert_eq!(value, from_golden);
+        let md = to_string(&value).expect("serialize");
+        assert!(md.contains("published:"), "{md}");
+        assert!(md.contains(values::PUBLISHED_RFC3339), "{md}");
+        assert!(
+            md.contains("1.5s") || md.contains("1.500s"),
+            "Duration proto3 JSON (1.5s or 1.500s), got {md}"
+        );
+        assert!(md.contains("meta:"), "{md}");
+        assert!(md.contains("{}"), "empty Empty object, got {md}");
+        assert!(md.contains("lang:"), "{md}");
+        assert!(md.contains("a,b.c"), "{md}");
+        assert!(md.contains("count:"), "{md}");
+        assert!(md.contains("3"), "{md}");
+        assert!(
+            md.contains("```\n2026-09-17T02:42:00Z\n---\n"),
+            "Timestamp body must be raw RFC 3339 after the fence, got {md}"
+        );
+        assert!(
+            md.contains("---\n1.5s\n") || md.contains("---\n1.500s\n"),
+            "Duration body must be raw proto3 JSON, got {md}"
+        );
+        assert!(
+            !md.contains("\"2026-09-17T02:42:00Z\"\n---"),
+            "body Timestamp must not be a quoted JSON string, got {md}"
+        );
+        let back: types::WellKnown = crate::from_str(&md).expect("round-trip");
+        assert_eq!(value, back);
+    }
+
+    #[test]
+    fn well_known_generated_round_trip() {
+        let value = values::well_known_generated();
+        let from_golden: serde_markdown_generated::markdown::testdata::WellKnown =
+            crate::from_str(goldens::WELL_KNOWN_FENCED_YAML).expect("golden");
+        assert_eq!(value, from_golden);
+        let md = to_string(&value).expect("serialize");
+        let back: serde_markdown_generated::markdown::testdata::WellKnown =
+            crate::from_str(&md).expect("round-trip");
+        assert_eq!(value, back);
+    }
+
+    #[test]
+    fn page_published_round_trip() {
+        let value = values::page_with_published();
+        let from_golden: types::Page =
+            crate::from_str(goldens::PAGE_PUBLISHED_YAML).expect("golden");
+        assert_eq!(value, from_golden);
+        let md = to_string(&value).expect("serialize");
+        assert!(md.contains("published:"), "{md}");
+        assert!(md.contains(values::PUBLISHED_RFC3339), "{md}");
+        let back: types::Page = crate::from_str(&md).expect("round-trip");
+        assert_eq!(value, back);
+    }
+
+    #[test]
+    fn page_published_generated_round_trip() {
+        let value = values::page_generated_with_published();
+        let from_golden: serde_markdown_generated::markdown::testdata::Page =
+            crate::from_str(goldens::PAGE_PUBLISHED_YAML).expect("golden");
+        assert_eq!(value, from_golden);
+        let md = to_string(&value).expect("serialize");
+        let back: serde_markdown_generated::markdown::testdata::Page =
+            crate::from_str(&md).expect("round-trip");
         assert_eq!(value, back);
     }
 }

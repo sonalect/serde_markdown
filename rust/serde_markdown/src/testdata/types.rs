@@ -3,9 +3,7 @@
 //! [`Markdown::BODY_FIELDS`] lists Serde field names (after `rename`) in
 //! declaration order.
 
-use std::collections::BTreeMap;
-
-use buffa_types::google::protobuf::{Duration, Timestamp};
+use buffa_types::google::protobuf::{Duration, Empty, FieldMask, Int32Value, Struct, Timestamp};
 use serde::{Deserialize, Serialize};
 
 use crate::Markdown;
@@ -92,13 +90,18 @@ pub struct Article {
 }
 
 /// WKT in fields and body (`markdown.testdata.WellKnown`).
+///
+/// Field types are `buffa_types` well-known messages so proto3 JSON serde
+/// supplies RFC 3339 / duration / field-mask mapping. This crate does not
+/// parse those strings itself.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Markdown)]
 pub struct WellKnown {
     pub published: Timestamp,
     pub ttl: Duration,
-    pub extra: BTreeMap<String, String>,
-    pub mask: String,
-    pub count: i32,
+    pub meta: Empty,
+    pub extra: Struct,
+    pub mask: FieldMask,
+    pub count: Int32Value,
     #[serde(rename = "occurredAt")]
     #[markdown(body)]
     pub occurred_at: Timestamp,

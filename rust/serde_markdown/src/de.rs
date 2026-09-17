@@ -2,10 +2,8 @@
 
 use std::vec;
 
-use serde::de::{
-    DeserializeOwned, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor,
-};
-use serde::de::value::{StringDeserializer, StrDeserializer};
+use serde::de::value::{StrDeserializer, StringDeserializer};
+use serde::de::{DeserializeOwned, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Value};
 
 use crate::error::{Error, ErrorKind};
@@ -26,8 +24,14 @@ use crate::parse::{self, Document, Fields, Sniff};
 ///
 /// Body fields listed in [`Markdown::BODY_FIELDS`] are filled from sections
 /// in declaration order. `String` / bytes sections are the raw section text
-/// (interiors are not trimmed). Nested structs, maps, sequences, and scalars
-/// parse as the fields format when a fields block was present, otherwise YAML.
+/// (interiors are not trimmed). Types whose proto3 JSON serde is a string
+/// (well-known `Timestamp`, `Duration`, `FieldMask`) read that same raw text.
+/// Nested structs, maps, sequences, and scalars parse as the fields format
+/// when a fields block was present, otherwise YAML.
+///
+/// Protobuf `Any` packing is not installed here. Callers who need `Any` must
+/// install a type registry (`buffa_types::register_wkt_types`) the same way
+/// they do for `serde_json`.
 ///
 /// Trailing omitted sections become `None` on optional fields. An empty
 /// section is `None`; a section whose content is the two characters `""`
@@ -755,6 +759,34 @@ mod tests {
         assert!(got.text1.contains("spaces   \n"), "{:?}", got.text1);
         assert!(got.text1.contains("🦀"), "{:?}", got.text1);
         assert!(got.text1.contains("Ещё"), "{:?}", got.text1);
+    }
+
+    #[test]
+    fn well_known_fenced_yaml_golden() {
+        let got: types::WellKnown = from_str(goldens::WELL_KNOWN_FENCED_YAML).expect("well_known");
+        assert_eq!(got, values::well_known());
+    }
+
+    #[test]
+    fn well_known_generated_deserializes_golden() {
+        let got: serde_markdown_generated::markdown::testdata::WellKnown =
+            from_str(goldens::WELL_KNOWN_FENCED_YAML).expect("generated well_known");
+        assert_eq!(got, values::well_known_generated());
+    }
+
+    #[test]
+    fn page_published_yaml_golden() {
+        let got: types::Page = from_str(goldens::PAGE_PUBLISHED_YAML).expect("published");
+        assert_eq!(got, values::page_with_published());
+        assert!(got.published.is_some());
+    }
+
+    #[test]
+    fn page_published_generated_deserializes_golden() {
+        let got: serde_markdown_generated::markdown::testdata::Page =
+            from_str(goldens::PAGE_PUBLISHED_YAML).expect("generated published");
+        assert_eq!(got, values::page_generated_with_published());
+        assert!(got.published.is_set());
     }
 
     #[test]

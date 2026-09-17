@@ -79,6 +79,11 @@ API changes bump the minor.
 - `#[derive(Markdown)]` and `#[markdown(body)]` via workspace crate
   `serde_markdown_derive`, re-exported behind the `derive` feature (on by
   default). Emitted `BODY_FIELDS` uses Serde field names after `rename`.
+- Google well-known types in the fields fence and as body sections via buffa
+  proto3 JSON serde (`Timestamp`, `Duration`, `Empty`, `Struct`, `FieldMask`,
+  `Int32Value`). Body `Timestamp` / `Duration` are the raw RFC 3339 / `1.5s`
+  form. Callers who need protobuf `Any` install a type registry
+  (`buffa_types::register_wkt_types`); this crate does not.
 
 ### Changed
 

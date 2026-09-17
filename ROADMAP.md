@@ -65,7 +65,7 @@ not use it yet; wiring is M5.
 | [M7](#m7-json-toml-bare-serialize) | done | JSON/TOML features; `FieldsLayout::Bare` |
 | [M8](#m8-option-and-presence) | done | Trailing vs middle `None`; `Some("")` |
 | [M9](#m9-nested-structured-names-whitespace) | done | Nested fields, structured body, rename, whitespace |
-| [M10](#m10-wkt) | not started | WKT in fence and body via `buffa-types` |
+| [M10](#m10-wkt) | done | WKT in fence and body via `buffa-types` |
 | [M11](#m11-buffa-annotate) | not started | `annotate_markdown_body`; generated messages |
 | [M12](#m12-io-and-features) | not started | `to_vec` / `from_slice` / writer; feature matrix |
 | [M13](#m13-documents-once) | not started | DESIGN, README, CHANGELOG, this dashboard |
@@ -484,7 +484,7 @@ Close only after M8.
 
 ## M10. WKT
 
-**Status:** not started
+**Status:** done
 
 **Codes:** DESIGN.md §4.3.
 
@@ -492,15 +492,15 @@ Close only after M9. Hand-written structs with `buffa_types` and the
 generated `WellKnown` message as a deserialize target if the `Markdown`
 impl is still manual. Generated `Markdown` impl is M11.
 
-- [ ] `well_known.fenced.yaml.md` round-trips Timestamp, Duration,
+- [x] `well_known.fenced.yaml.md` round-trips Timestamp, Duration,
       Empty, Struct, FieldMask, Int32Value in the fence; Timestamp and
       Duration as body sections (raw RFC 3339 / `"1.5s"` form).
-- [ ] Do not hand-roll RFC 3339. Mapping is buffa proto3 JSON serde.
-- [ ] `page.published.yaml.md` sets `published` on `types::Page` /
+- [x] Do not hand-roll RFC 3339. Mapping is buffa proto3 JSON serde.
+- [x] `page.published.yaml.md` sets `published` on `types::Page` /
       generated `Page`.
-- [ ] `Any` is not required. Document that callers who need `Any`
+- [x] `Any` is not required. Document that callers who need `Any`
       install a registry (DESIGN.md §4.3); no test in this stage.
-- [ ] `bazel test //...` green. Owner has reviewed the diff.
+- [x] `bazel test //...` green. Owner has reviewed the diff.
 
 **Review:** WKT. Stop.
 

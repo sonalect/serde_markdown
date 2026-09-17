@@ -4,6 +4,11 @@
 //! A root struct's non-body fields map to an optional first YAML, JSON, or
 //! TOML block (fenced or bare). Fields listed in [`Markdown::BODY_FIELDS`]
 //! map to body sections split on top-level `---`.
+//!
+//! Google well-known types in the fence or body use that field type's proto3
+//! JSON serde. This crate does not parse RFC 3339 itself. Callers who pack
+//! protobuf `Any` must install a type registry (`buffa_types::register_wkt_types`)
+//! the same way they do for `serde_json`.
 
 /// Path of the design document in the repository root.
 pub const DESIGN: &str = "DESIGN.md";
@@ -63,6 +68,14 @@ mod testdata_smoke {
         );
         assert_eq!(types::Article::BODY_FIELDS, ["note"]);
         assert_eq!(types::WellKnown::BODY_FIELDS, ["occurredAt", "pause"]);
+        assert_eq!(
+            serde_markdown_generated::markdown::testdata::WellKnown::BODY_FIELDS,
+            ["occurredAt", "pause"]
+        );
+        assert_eq!(
+            serde_markdown_generated::markdown::testdata::Page::BODY_FIELDS,
+            ["text1", "appendix"]
+        );
         assert_eq!(types::Proto3Page::BODY_FIELDS, ["body"]);
     }
 

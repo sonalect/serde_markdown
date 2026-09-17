@@ -29,6 +29,19 @@ fn ttl_1_5s() -> Duration {
     }
 }
 
+fn extra_struct() -> Struct {
+    let mut extra = Struct::default();
+    extra.fields.insert("lang".into(), Value::from("ru"));
+    extra
+}
+
+fn field_mask() -> FieldMask {
+    FieldMask {
+        paths: vec!["a".into(), "b.c".into()],
+        ..Default::default()
+    }
+}
+
 pub fn page() -> types::Page {
     types::Page {
         field1: "foo".into(),
@@ -209,32 +222,23 @@ pub fn well_known() -> types::WellKnown {
     types::WellKnown {
         published: published(),
         ttl: ttl_1_5s(),
-        extra: [("lang".into(), "ru".into())].into(),
-        mask: "a,b.c".into(),
-        count: 3,
+        meta: Empty::default(),
+        extra: extra_struct(),
+        mask: field_mask(),
+        count: Int32Value::from(3),
         occurred_at: published(),
         pause: ttl_1_5s(),
     }
 }
 
 pub fn well_known_generated() -> WellKnown {
-    let mut extra = Struct::default();
-    extra.fields.insert("lang".into(), Value::from("ru"));
     WellKnown {
         published: published().into(),
         ttl: ttl_1_5s().into(),
         meta: Empty::default().into(),
-        extra: extra.into(),
-        mask: FieldMask {
-            paths: vec!["a".into(), "b.c".into()],
-            ..Default::default()
-        }
-        .into(),
-        count: Int32Value {
-            value: 3,
-            ..Default::default()
-        }
-        .into(),
+        extra: extra_struct().into(),
+        mask: field_mask().into(),
+        count: Int32Value::from(3).into(),
         occurred_at: published().into(),
         pause: ttl_1_5s().into(),
         ..Default::default()
