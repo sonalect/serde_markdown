@@ -10,9 +10,11 @@ use crate::markdown::Markdown;
 /// Serialize `value` as a fenced YAML Markdown document.
 ///
 /// The fields block is a labeled `yaml` fence. Body `String` fields are written
-/// as raw section text, joined with `\n---\n`. There is no leading blank line,
-/// one newline after the closing fence, a trailing newline at EOF, and no
-/// trailing `---` after the last section.
+/// as raw section text, joined with `\n---\n`. Trailing `None` body fields are
+/// omitted; a middle `None` is an empty section; `Some("")` is the two
+/// characters `""`. There is no leading blank line, one newline after the
+/// closing fence, a trailing newline at EOF, and no trailing `---` after
+/// the last emitted section.
 pub fn to_string<T: Serialize + Markdown>(value: &T) -> Result<String, Error> {
     to_string_with(value, Format::Yaml, FieldsLayout::Fenced)
 }
@@ -279,28 +281,50 @@ fn render(
         }
     }
 
-    for (i, name) in body_fields.iter().enumerate() {
-        let Some(value) = captured.body.get(*name) else {
-            return Err(Error::body(format!("missing body field {name}")));
-        };
-        let Value::String(section) = value else {
-            return Err(Error::body(format!(
-                "body field {name} must serialize as a string"
-            )));
-        };
-        if i > 0 || (has_fields && layout == FieldsLayout::Bare) {
+    let mut slots = Vec::with_capacity(body_fields.len());
+    for name in body_fields {
+        slots.push(body_slot(name, captured.body.get(*name))?);
+    }
+    while slots.pop_if(|slot| matches!(slot, BodySlot::Absent)).is_some() {}
+
+    for (i, slot) in slots.iter().enumerate() {
+        let need_sep = i > 0 || (has_fields && layout == FieldsLayout::Bare);
+        if need_sep {
             if !out.ends_with('\n') {
                 out.push('\n');
             }
             out.push_str("---\n");
         }
-        out.push_str(section);
+        match slot {
+            BodySlot::Absent => {
+                if need_sep {
+                    out.push('\n');
+                }
+            }
+            BodySlot::Raw(text) => out.push_str(text),
+        }
     }
 
     if !out.is_empty() && !out.ends_with('\n') {
         out.push('\n');
     }
     Ok(out)
+}
+
+enum BodySlot<'a> {
+    Absent,
+    Raw(&'a str),
+}
+
+fn body_slot<'a>(name: &str, value: Option<&'a Value>) -> Result<BodySlot<'a>, Error> {
+    match value {
+        None | Some(Value::Null) => Ok(BodySlot::Absent),
+        Some(Value::String(s)) if s.is_empty() => Ok(BodySlot::Raw("\"\"")),
+        Some(Value::String(s)) => Ok(BodySlot::Raw(s)),
+        Some(_) => Err(Error::body(format!(
+            "body field {name} must serialize as a string"
+        ))),
+    }
 }
 
 fn fence_lang(format: Format) -> &'static str {
@@ -470,6 +494,49 @@ mod tests {
         assert!(!md.contains("---"), "{md}");
         let back: types::FieldsOnly = crate::from_str(&md).expect("deserialize");
         assert_eq!(values::fields_only(), back);
+    }
+
+    fn assert_optional_round_trip(value: &types::OptionalBody, golden: &str) {
+        let from_golden: types::OptionalBody = crate::from_str(golden).expect("golden");
+        assert_eq!(*value, from_golden);
+        let md = to_string(value).expect("serialize");
+        let back: types::OptionalBody = crate::from_str(&md).expect("round-trip");
+        assert_eq!(*value, back);
+    }
+
+    #[test]
+    fn optional_middle_none_keeps_empty_slot() {
+        let value = values::optional_middle_none();
+        assert_optional_round_trip(&value, goldens::OPTIONAL_MIDDLE_NONE);
+        let md = to_string(&value).expect("serialize");
+        assert!(md.contains("```\na\n---\n\n---\nc\n"), "{md}");
+    }
+
+    #[test]
+    fn optional_trailing_none_omits_separator() {
+        let value = values::optional_trailing_none();
+        assert_optional_round_trip(&value, goldens::OPTIONAL_TRAILING_NONE);
+        let md = to_string(&value).expect("serialize");
+        assert!(md.contains("```\na\n"), "{md}");
+        assert!(!md.contains("---"), "{md}");
+        let trimmed = md.trim_end();
+        assert!(!trimmed.ends_with("---"), "{md}");
+    }
+
+    #[test]
+    fn optional_leading_none_empty_first_section() {
+        let value = values::optional_leading_none();
+        assert_optional_round_trip(&value, goldens::OPTIONAL_LEADING_NONE);
+        let md = to_string(&value).expect("serialize");
+        assert!(md.contains("```\n---\na\n"), "{md}");
+    }
+
+    #[test]
+    fn optional_empty_string_writes_quotes() {
+        let value = values::optional_empty_string();
+        assert_optional_round_trip(&value, goldens::OPTIONAL_EMPTY_STRING);
+        let md = to_string(&value).expect("serialize");
+        assert!(md.contains("```\na\n---\n\"\"\n"), "{md}");
     }
 
     #[test]

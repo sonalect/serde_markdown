@@ -21,13 +21,24 @@ use crate::parse::{self, Document, Fields, Sniff};
 ///
 /// Body fields listed in [`Markdown::BODY_FIELDS`] are filled from sections
 /// in declaration order; `String` sections are the raw section text.
+///
+/// Trailing omitted sections become `None` on optional fields. An empty
+/// section is `None`; a section whose content is the two characters `""`
+/// is `Some("")`. Extra sections, a missing required section, and an empty
+/// section for a required structured field are [`ErrorKind::Body`].
 pub fn from_str<T>(s: &str) -> Result<T, Error>
 where
     T: DeserializeOwned + Markdown,
 {
     let (mut fields, body) = decode_document(parse::parse(s))?;
-    assign_body(&mut fields, T::BODY_FIELDS, &body)?;
-    serde_json::from_value(Value::Object(fields)).map_err(Error::type_error)
+    let used_absent = assign_body(&mut fields, T::BODY_FIELDS, &body)?;
+    serde_json::from_value(Value::Object(fields)).map_err(|err| {
+        if used_absent {
+            Error::body(err)
+        } else {
+            Error::type_error(err)
+        }
+    })
 }
 
 fn decode_document(doc: Document) -> Result<(Map<String, Value>, Vec<String>), Error> {
@@ -92,11 +103,15 @@ fn sniff_format(sniff: Sniff) -> Format {
     }
 }
 
+/// Two characters that encode optional `Some("")` (distinct from an empty
+/// section, which is `None`).
+const EMPTY_STRING_SECTION: &str = "\"\"";
+
 fn assign_body(
     fields: &mut Map<String, Value>,
     body_fields: &'static [&'static str],
     sections: &[String],
-) -> Result<(), Error> {
+) -> Result<bool, Error> {
     if sections.len() > body_fields.len() {
         return Err(Error::body(format!(
             "expected at most {} body section(s), found {}",
@@ -104,20 +119,25 @@ fn assign_body(
             sections.len()
         )));
     }
-    if sections.len() < body_fields.len() {
-        return Err(Error::body(format!(
-            "expected {} body section(s), found {}",
-            body_fields.len(),
-            sections.len()
-        )));
+    let mut used_absent = sections.len() < body_fields.len();
+    for (i, name) in body_fields.iter().enumerate() {
+        let value = match sections.get(i) {
+            None => Value::Null,
+            Some(section) => {
+                let text = section_text(section);
+                if text.is_empty() {
+                    used_absent = true;
+                    Value::Null
+                } else if text == EMPTY_STRING_SECTION {
+                    Value::String(String::new())
+                } else {
+                    Value::String(text.to_owned())
+                }
+            }
+        };
+        fields.insert((*name).to_owned(), value);
     }
-    for (name, section) in body_fields.iter().zip(sections) {
-        fields.insert(
-            (*name).to_owned(),
-            Value::String(section_text(section).to_owned()),
-        );
-    }
-    Ok(())
+    Ok(used_absent)
 }
 
 /// Drop the document line terminator after a section. Interior blank lines and
@@ -308,6 +328,59 @@ mod tests {
         let err = from_str::<types::Page>(goldens::PAGE_FENCED_YAML).expect_err("yaml");
         assert_eq!(err.kind(), ErrorKind::FormatDisabled);
         assert!(std::error::Error::source(&err).is_none());
+    }
+
+    #[test]
+    fn optional_middle_none_golden() {
+        let got: types::OptionalBody =
+            from_str(goldens::OPTIONAL_MIDDLE_NONE).expect("middle none");
+        assert_eq!(got, values::optional_middle_none());
+    }
+
+    #[test]
+    fn optional_trailing_none_golden() {
+        let got: types::OptionalBody =
+            from_str(goldens::OPTIONAL_TRAILING_NONE).expect("trailing none");
+        assert_eq!(got, values::optional_trailing_none());
+    }
+
+    #[test]
+    fn optional_leading_none_golden() {
+        let got: types::OptionalBody =
+            from_str(goldens::OPTIONAL_LEADING_NONE).expect("leading none");
+        assert_eq!(got, values::optional_leading_none());
+    }
+
+    #[test]
+    fn optional_empty_string_golden() {
+        let got: types::OptionalBody =
+            from_str(goldens::OPTIONAL_EMPTY_STRING).expect("empty string");
+        assert_eq!(got, values::optional_empty_string());
+    }
+
+    #[test]
+    fn extra_optional_body_section_is_body() {
+        let input = concat!(
+            "```yaml\n",
+            "title: memo\n",
+            "```\n",
+            "a\n",
+            "---\n",
+            "\n",
+            "---\n",
+            "c\n",
+            "---\n",
+            "extra\n"
+        );
+        let err = from_str::<types::OptionalBody>(input).expect_err("extra section");
+        assert_eq!(err.kind(), ErrorKind::Body);
+    }
+
+    #[test]
+    fn empty_section_for_required_structured_is_body() {
+        let input = "```yaml\ntitle: t\n```\n---\n";
+        let err = from_str::<types::Article>(input).expect_err("empty structured");
+        assert_eq!(err.kind(), ErrorKind::Body);
     }
 
     #[test]

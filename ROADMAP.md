@@ -63,7 +63,7 @@ not use it yet; wiring is M5.
 | [M5](#m5-yaml-fenced) | done | `to_string` / `from_str` YAML fenced, hand-written |
 | [M6](#m6-document-shapes) | done | Bare, unlabeled, prefix, body-only, fence-not-first |
 | [M7](#m7-json-toml-bare-serialize) | done | JSON/TOML features; `FieldsLayout::Bare` |
-| [M8](#m8-option-and-presence) | not started | Trailing vs middle `None`; `Some("")` |
+| [M8](#m8-option-and-presence) | done | Trailing vs middle `None`; `Some("")` |
 | [M9](#m9-nested-structured-names-whitespace) | not started | Nested fields, structured body, rename, whitespace |
 | [M10](#m10-wkt) | not started | WKT in fence and body via `buffa-types` |
 | [M11](#m11-buffa-annotate) | not started | `annotate_markdown_body`; generated messages |
@@ -437,23 +437,23 @@ Close only after M6.
 
 ## M8. Option and presence
 
-**Status:** not started
+**Status:** done
 
 **Codes:** DESIGN.md §4.4.
 
 Close only after M7. Use `types::OptionalBody` and
 `optional.*.md`.
 
-- [ ] `Some("a"), None, Some("c")` ↔ `optional.middle_none.md`.
-- [ ] Trailing absent omitted (`optional.trailing_none.md`).
-- [ ] Leading absent is an empty first section
+- [x] `Some("a"), None, Some("c")` ↔ `optional.middle_none.md`.
+- [x] Trailing absent omitted (`optional.trailing_none.md`).
+- [x] Leading absent is an empty first section
       (`optional.leading_none.md`).
-- [ ] `Some("")` is a section whose content is the two characters `""`
+- [x] `Some("")` is a section whose content is the two characters `""`
       (`optional.empty_string.md`).
-- [ ] Extra trailing sections → `Body` (too many). Missing section for
+- [x] Extra trailing sections → `Body` (too many). Missing section for
       a required body field → `Body`. Empty section for a required
       structured type → `Body` (may wait for M9 if no fixture yet).
-- [ ] `bazel test //...` green. Owner has reviewed the diff.
+- [x] `bazel test //...` green. Owner has reviewed the diff.
 
 **Review:** presence matrix. Stop.
 

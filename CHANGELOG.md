@@ -67,6 +67,11 @@ API changes bump the minor.
   leading whitespace/`---` prefix, body-only when the first slice is not a
   mapping, and `page.split.*` as one first body section plus appendix. A
   later fenced `yaml` block is body, not fields.
+- Body `Option<String>` presence: trailing `None` is omitted, a middle
+  `None` keeps an empty section, a leading `None` is an empty first
+  section, and `Some("")` is the two characters `""`. Extra sections, a
+  missing required body section, and an empty section for a required
+  structured field are `Body`.
 - `#[derive(Markdown)]` and `#[markdown(body)]` via workspace crate
   `serde_markdown_derive`, re-exported behind the `derive` feature (on by
   default). Emitted `BODY_FIELDS` uses Serde field names after `rename`.
