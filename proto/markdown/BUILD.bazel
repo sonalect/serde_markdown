@@ -1,5 +1,5 @@
 load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
-load("@bazel_utils_buf//:buf.bzl", "buf_format", "buf_generate", "buf_lint_test", "buf_module", "buf_plugin")
+load("@bazel_utils_buf//:buf.bzl", "buf_format", "buf_generate", "buf_lint_test", "buf_module")
 load("//bazel:compat.bzl", "NOT_WINDOWS")
 
 exports_files(
@@ -35,17 +35,12 @@ buf_format(
     module = ":module",
 )
 
-buf_plugin(
-    name = "protoc-gen-buffa-packaging",
-    actual = "@cargo//:protoc-gen-buffa-packaging__protoc-gen-buffa-packaging",
-    visibility = ["//visibility:public"],
-)
-
 buf_generate(
     name = "rust",
     module = ":module",
     plugins = [
-        ":protoc-gen-buffa-packaging",
+        "@bazel_utils_buf//protoc/plugins/protoc-gen-buffa",
+        "@bazel_utils_buf//protoc/plugins/protoc-gen-buffa-packaging",
     ],
     template = "//:buf.gen.rust.yaml",
 )

@@ -680,11 +680,11 @@ Same shape as [scheda](https://github.com/amsokol/scheda): bzlmod, `bazel_utils_
 
 | Path | Role |
 | --- | --- |
-| `MODULE.bazel` | `serde_markdown` module, `protobuf` 36.1.bcr.1, `rules_rust`, `bazel_utils_{bazel,buf,core,md,rust}` |
-| `buf.MODULE.bazel` | Buf CLI `v1.73.0` |
-| `rust.MODULE.bazel` | Rust 1.98.1 / edition 2024, crate_universe, `protoc-gen-buffa-packaging` |
+| `MODULE.bazel` | `serde_markdown` module, `protobuf` 36.1.bcr.1, `rules_rust`, `bazel_utils_{bazel,buf,core,md,protoc,rust}` |
+| `buf.MODULE.bazel` | Buf CLI `v1.73.0`; `protoc.plugin` pins `protoc-gen-buffa` and `protoc-gen-buffa-packaging` `v0.9.2` |
+| `rust.MODULE.bazel` | Rust 1.98.1 / edition 2024, crate_universe (workspace crates only) |
 | `buf.yaml` | modules `proto/` and `rust/examples/protobuf/proto` (LSP, lint, format); dep `buf.build/protocolbuffers/wellknowntypes` |
-| `buf.gen.rust.yaml` | remote `buf.build/anthropics/buffa` (`json=true`) + local packaging plugin; `inputs` is `proto/` only |
+| `buf.gen.rust.yaml` | local `protoc-gen-buffa` (`json=true`) + local `protoc-gen-buffa-packaging`; `inputs` is `proto/` only |
 | `proto/markdown/BUILD.bazel` | `buf_module`, lint, format, generate → `rust/generated/markdown` |
 | `rust/examples/protobuf` | consumer-shaped `build.rs` (`buffa_build` + `annotate_markdown_body`); Bazel `cargo_build_script` + `protoc_prefix` from the proto toolchain prebuilt (not `@protobuf//:protoc`). No checked-in stubs. `cargo run -p example-protobuf` needs `PROTOC`. |
 

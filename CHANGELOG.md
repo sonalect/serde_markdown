@@ -37,7 +37,8 @@ API changes bump the minor.
   `Page` generated in the example crate, both printing the same fenced YAML
   document (`cargo run -p example-page` / `cargo run -p example-protobuf`).
 - Bazel + Buf pipeline in the scheda shape: `buf_module`, lint, format,
-  `buf.build/anthropics/buffa` plus `protoc-gen-buffa-packaging`,
+  prebuilt `protoc-gen-buffa` and `protoc-gen-buffa-packaging` from
+  `bazel_utils_protoc` (`@bazel_utils_buf//protoc/plugins/…`),
   `bazel run //proto/markdown:generate`. [`buf.lock`](buf.lock) pins
   well-known types so Buf LSP can resolve `google/protobuf/*.proto`.
 - Workspace crates `serde_markdown`, `serde_markdown_derive`, and
@@ -119,7 +120,7 @@ API changes bump the minor.
   `rust/serde_markdown_derive`, error kinds and defaults. DESIGN.md §11 is
   only a pointer to ROADMAP.md.
 - `serde_markdown_derive` uses `syn` 3.0.5.
-- Buf CLI `v1.73.0`; `bazel_utils_*` modules `v0.2.6`.
+- Buf CLI `v1.73.0`; `bazel_utils_*` modules `v0.2.7`.
 - Error contract (DESIGN.md §7 / §12): handwritten `Error` and
   `ErrorKind` like `serde_json` (no `thiserror`, no `anyhow`, no proto
   envelope). Callers match `kind()`; `Syntax` has a byte offset;

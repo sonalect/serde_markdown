@@ -17,19 +17,9 @@ cargo = use_extension(
     "@rules_rust//crate_universe:extensions.bzl",
     "crate",
 )
-
-# Binary plugin for buf generate. crates.io 0.9.2 is bin-only; the fork
-# tag adds an empty [lib] so crate_universe generate_binaries can emit it.
-cargo.spec(
-    git = "https://github.com/amsokol/buffa",
-    package = "protoc-gen-buffa-packaging",
-    repositories = ["cargo"],
-    tag = "v0.9.2-bazel-packaging",
-)
 cargo.from_cargo(
     name = "cargo",
     cargo_lockfile = "//:Cargo.lock",
-    generate_binaries = True,
     manifests = [
         "//:Cargo.toml",
     ],

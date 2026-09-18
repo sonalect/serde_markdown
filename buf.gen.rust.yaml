@@ -3,7 +3,7 @@ version: v2
 inputs:
   - directory: proto
 plugins:
-  - remote: buf.build/anthropics/buffa:v0.9.2
+  - local: protoc-gen-buffa
     out: rust/generated/markdown
     opt:
       - json=true
