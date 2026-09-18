@@ -20,7 +20,7 @@
 //!
 //! ```
 //! # #[cfg(all(feature = "derive", feature = "yaml"))]
-//! # {
+//! # fn main() -> Result<(), serde_markdown::Error> {
 //! use serde::{Deserialize, Serialize};
 //! use serde_markdown::{from_str, to_string, Markdown};
 //!
@@ -35,10 +35,13 @@
 //!     title: "Hi".into(),
 //!     body: "Hello".into(),
 //! };
-//! let md = to_string(&page).expect("serialize");
-//! let back: Page = from_str(&md).expect("deserialize");
+//! let md = to_string(&page)?;
+//! let back: Page = from_str(&md)?;
 //! assert_eq!(page, back);
+//! # Ok(())
 //! # }
+//! # #[cfg(not(all(feature = "derive", feature = "yaml")))]
+//! # fn main() {}
 //! ```
 
 /// Path of the mapping document in the repository root (`DESIGN.md`).

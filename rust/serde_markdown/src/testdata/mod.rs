@@ -12,8 +12,6 @@
 //! no `FileDescriptorSet` callback). `annotate_markdown_body` is for a
 //! consumer `build.rs`. Views are not [`Markdown`].
 
-#![allow(dead_code)]
-
 pub mod goldens;
 pub mod types;
 pub mod values;

@@ -118,7 +118,7 @@ API changes bump the minor.
 - DESIGN.md, README, and this file match the shipped crate: function names
   (`from_str` is `DeserializeOwned`), feature `json = []`, derive path
   `rust/serde_markdown_derive`, error kinds and defaults. DESIGN.md §11 is
-  only a pointer to ROADMAP.md.
+  only a pointer to ROADMAP.md (M0–M15).
 - `serde_markdown_derive` uses `syn` 3.0.5.
 - Buf CLI `v1.73.0`; `bazel_utils_*` modules `v0.2.8`.
 - Error contract (DESIGN.md §7 / §12): handwritten `Error` and
@@ -133,6 +133,11 @@ API changes bump the minor.
 
 ### Fixed
 
+- Unclosed fenced code blocks fail with `Syntax` and a byte offset instead of
+  being treated as fields or body.
+- Body `Vec<u8>` (and `serialize_bytes` buffers) write raw UTF-8 Markdown;
+  invalid UTF-8 on serialize is `Body`. They are no longer dumped as a
+  YAML/JSON/TOML array of numbers.
 - The workspace `buf.yaml` lists the protobuf example proto directory so Buf
   LSP can resolve `markdown/options.proto`.
 

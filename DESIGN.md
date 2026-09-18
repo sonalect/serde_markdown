@@ -787,7 +787,7 @@ Exact `Display` wording lives in rustdoc. `FormatDisabled` displays as `format n
 
 ## 11. Implementation order
 
-Stage order is [ROADMAP.md](ROADMAP.md) (M0–M14). This section is only that pointer. Do not treat it as a second checklist.
+Stage order is [ROADMAP.md](ROADMAP.md) (M0–M15). This section is only that pointer. Do not treat it as a second checklist.
 
 ## 12. Resolved decisions
 

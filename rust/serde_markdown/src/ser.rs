@@ -1,8 +1,10 @@
 //! Serialize a `Markdown` root struct to a document.
 
+use std::collections::HashMap;
+use std::fmt;
 use std::io::Write;
 
-use serde::ser::{Impossible, Serialize, SerializeStruct, Serializer};
+use serde::ser::{Impossible, Serialize, SerializeSeq, SerializeStruct, Serializer};
 use serde_json::{Map, Value};
 
 use crate::error::Error;
@@ -76,7 +78,15 @@ where
 
 struct Captured {
     fields: Map<String, Value>,
-    body: Map<String, Value>,
+    body: HashMap<String, BodyValue>,
+}
+
+enum BodyValue {
+    Json(Value),
+    /// Raw UTF-8 from `serialize_bytes` / `serialize_byte_buf` / a non-empty
+    /// seq of `u8`. Empty JSON strings still use the `""` encoding; this
+    /// variant is written as-is, including empty.
+    Utf8(String),
 }
 
 struct RootSerializer {
@@ -239,7 +249,7 @@ impl Serializer for RootSerializer {
         Ok(StructSerializer {
             body_fields: self.body_fields,
             fields: Map::new(),
-            body: Map::new(),
+            body: HashMap::new(),
         })
     }
 
@@ -257,7 +267,7 @@ impl Serializer for RootSerializer {
 struct StructSerializer {
     body_fields: &'static [&'static str],
     fields: Map<String, Value>,
-    body: Map<String, Value>,
+    body: HashMap<String, BodyValue>,
 }
 
 impl SerializeStruct for StructSerializer {
@@ -269,10 +279,10 @@ impl SerializeStruct for StructSerializer {
         key: &'static str,
         value: &T,
     ) -> Result<(), Self::Error> {
-        let json = serde_json::to_value(value).map_err(Error::type_error)?;
         if self.body_fields.contains(&key) {
-            self.body.insert(key.to_owned(), json);
+            self.body.insert(key.to_owned(), capture_body_field(value)?);
         } else {
+            let json = serde_json::to_value(value).map_err(Error::type_error)?;
             self.fields.insert(key.to_owned(), json);
         }
         Ok(())
@@ -346,12 +356,410 @@ enum BodySlot {
     Raw(String),
 }
 
-fn body_slot(value: Option<&Value>, format: Format) -> Result<BodySlot, Error> {
+fn body_slot(value: Option<&BodyValue>, format: Format) -> Result<BodySlot, Error> {
     match value {
-        None | Some(Value::Null) => Ok(BodySlot::Absent),
-        Some(Value::String(s)) if s.is_empty() => Ok(BodySlot::Raw("\"\"".to_owned())),
-        Some(Value::String(s)) => Ok(BodySlot::Raw(s.clone())),
-        Some(other) => Ok(BodySlot::Raw(format::dump(other, format)?)),
+        None | Some(BodyValue::Json(Value::Null)) => Ok(BodySlot::Absent),
+        Some(BodyValue::Utf8(s)) => Ok(BodySlot::Raw(s.clone())),
+        Some(BodyValue::Json(Value::String(s))) if s.is_empty() => {
+            Ok(BodySlot::Raw("\"\"".to_owned()))
+        }
+        Some(BodyValue::Json(Value::String(s))) => Ok(BodySlot::Raw(s.clone())),
+        Some(BodyValue::Json(other)) => Ok(BodySlot::Raw(format::dump(other, format)?)),
+    }
+}
+
+fn capture_body_field<T: ?Sized + Serialize>(value: &T) -> Result<BodyValue, Error> {
+    match value.serialize(BytesProbe) {
+        Ok(text) => Ok(BodyValue::Utf8(text)),
+        Err(ProbeError::NotBytes) => {
+            let json = serde_json::to_value(value).map_err(Error::type_error)?;
+            Ok(BodyValue::Json(json))
+        }
+        Err(ProbeError::InvalidUtf8) => Err(Error::body("invalid UTF-8 in byte body field")),
+        Err(ProbeError::Other(err)) => Err(err),
+    }
+}
+
+enum ProbeError {
+    NotBytes,
+    InvalidUtf8,
+    Other(Error),
+}
+
+impl fmt::Debug for ProbeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotBytes => f.write_str("NotBytes"),
+            Self::InvalidUtf8 => f.write_str("InvalidUtf8"),
+            Self::Other(err) => fmt::Debug::fmt(err, f),
+        }
+    }
+}
+
+impl fmt::Display for ProbeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotBytes => f.write_str("not a byte body field"),
+            Self::InvalidUtf8 => f.write_str("invalid UTF-8 in byte body field"),
+            Self::Other(err) => fmt::Display::fmt(err, f),
+        }
+    }
+}
+
+impl std::error::Error for ProbeError {}
+
+impl serde::ser::Error for ProbeError {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Self::Other(Error::type_error(msg))
+    }
+}
+
+struct BytesProbe;
+
+fn not_bytes<T>() -> Result<T, ProbeError> {
+    Err(ProbeError::NotBytes)
+}
+
+impl Serializer for BytesProbe {
+    type Ok = String;
+    type Error = ProbeError;
+    type SerializeSeq = ProbeSeq;
+    type SerializeTuple = Impossible<String, ProbeError>;
+    type SerializeTupleStruct = Impossible<String, ProbeError>;
+    type SerializeTupleVariant = Impossible<String, ProbeError>;
+    type SerializeMap = Impossible<String, ProbeError>;
+    type SerializeStruct = Impossible<String, ProbeError>;
+    type SerializeStructVariant = Impossible<String, ProbeError>;
+
+    fn serialize_bool(self, _v: bool) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_i8(self, _v: i8) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_i16(self, _v: i16) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_i32(self, _v: i32) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_i64(self, _v: i64) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_u8(self, _v: u8) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_u16(self, _v: u16) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_u32(self, _v: u32) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_u64(self, _v: u64) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_f32(self, _v: f32) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_f64(self, _v: f64) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_char(self, _v: char) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_str(self, _v: &str) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_bytes(self, v: &[u8]) -> Result<Self::Ok, Self::Error> {
+        String::from_utf8(v.to_vec()).map_err(|_| ProbeError::InvalidUtf8)
+    }
+
+    fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_some<T: ?Sized + Serialize>(self, value: &T) -> Result<Self::Ok, Self::Error> {
+        value.serialize(self)
+    }
+
+    fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_unit_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_newtype_struct<T: ?Sized + Serialize>(
+        self,
+        _name: &'static str,
+        value: &T,
+    ) -> Result<Self::Ok, Self::Error> {
+        value.serialize(self)
+    }
+
+    fn serialize_newtype_variant<T: ?Sized + Serialize>(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _value: &T,
+    ) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_seq(self, len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+        Ok(ProbeSeq {
+            buf: Vec::with_capacity(len.unwrap_or(0)),
+        })
+    }
+
+    fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_tuple_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_tuple_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_struct_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeStructVariant, Self::Error> {
+        not_bytes()
+    }
+}
+
+struct ProbeSeq {
+    buf: Vec<u8>,
+}
+
+struct U8Element;
+
+impl Serializer for U8Element {
+    type Ok = u8;
+    type Error = ProbeError;
+    type SerializeSeq = Impossible<u8, ProbeError>;
+    type SerializeTuple = Impossible<u8, ProbeError>;
+    type SerializeTupleStruct = Impossible<u8, ProbeError>;
+    type SerializeTupleVariant = Impossible<u8, ProbeError>;
+    type SerializeMap = Impossible<u8, ProbeError>;
+    type SerializeStruct = Impossible<u8, ProbeError>;
+    type SerializeStructVariant = Impossible<u8, ProbeError>;
+
+    fn serialize_u8(self, v: u8) -> Result<Self::Ok, Self::Error> {
+        Ok(v)
+    }
+
+    fn serialize_bool(self, _v: bool) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_i8(self, _v: i8) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_i16(self, _v: i16) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_i32(self, _v: i32) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_i64(self, _v: i64) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_u16(self, _v: u16) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_u32(self, _v: u32) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_u64(self, _v: u64) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_f32(self, _v: f32) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_f64(self, _v: f64) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_char(self, _v: char) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_str(self, _v: &str) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_bytes(self, _v: &[u8]) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_some<T: ?Sized + Serialize>(self, _value: &T) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_unit_struct(self, _name: &'static str) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_unit_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_newtype_struct<T: ?Sized + Serialize>(
+        self,
+        _name: &'static str,
+        _value: &T,
+    ) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_newtype_variant<T: ?Sized + Serialize>(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _value: &T,
+    ) -> Result<Self::Ok, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_tuple_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_tuple_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
+        not_bytes()
+    }
+
+    fn serialize_struct_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeStructVariant, Self::Error> {
+        not_bytes()
+    }
+}
+
+impl SerializeSeq for ProbeSeq {
+    type Ok = String;
+    type Error = ProbeError;
+
+    fn serialize_element<T: ?Sized + Serialize>(&mut self, value: &T) -> Result<(), Self::Error> {
+        self.buf.push(value.serialize(U8Element)?);
+        Ok(())
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        if self.buf.is_empty() {
+            return Err(ProbeError::NotBytes);
+        }
+        String::from_utf8(self.buf).map_err(|_| ProbeError::InvalidUtf8)
     }
 }
 
@@ -871,6 +1279,111 @@ mod tests {
         let err = to_writer(Boom, &values::page()).expect_err("write");
         assert_eq!(err.kind(), ErrorKind::Io);
         assert!(std::error::Error::source(&err).is_some());
+    }
+
+    #[cfg(feature = "yaml")]
+    #[derive(Debug, PartialEq, serde::Deserialize, Serialize, crate::Markdown)]
+    struct BytesDoc {
+        title: String,
+        #[markdown(body)]
+        data: Vec<u8>,
+    }
+
+    #[cfg(feature = "yaml")]
+    #[derive(Debug, PartialEq)]
+    struct ByteField(Vec<u8>);
+
+    #[cfg(feature = "yaml")]
+    impl Serialize for ByteField {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            serializer.serialize_bytes(&self.0)
+        }
+    }
+
+    #[cfg(feature = "yaml")]
+    impl<'de> serde::Deserialize<'de> for ByteField {
+        fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            struct Vis;
+            impl<'de> serde::de::Visitor<'de> for Vis {
+                type Value = ByteField;
+
+                fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    formatter.write_str("bytes")
+                }
+
+                fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<ByteField, E> {
+                    Ok(ByteField(v.to_vec()))
+                }
+
+                fn visit_byte_buf<E: serde::de::Error>(self, v: Vec<u8>) -> Result<ByteField, E> {
+                    Ok(ByteField(v))
+                }
+            }
+            deserializer.deserialize_byte_buf(Vis)
+        }
+    }
+
+    #[cfg(feature = "yaml")]
+    #[derive(Debug, PartialEq, serde::Deserialize, Serialize, crate::Markdown)]
+    struct ByteBufDoc {
+        title: String,
+        #[markdown(body)]
+        data: ByteField,
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn vec_u8_body_is_raw_utf8() {
+        let value = BytesDoc {
+            title: "bin".into(),
+            data: b"caf\xc3\xa9".to_vec(),
+        };
+        let md = to_string(&value).expect("serialize");
+        assert!(md.contains("```yaml\n"), "{md}");
+        assert!(md.contains("title: bin"), "{md}");
+        assert!(
+            md.contains("```\ncafé\n"),
+            "Vec<u8> body must be raw UTF-8, got {md}"
+        );
+        assert!(
+            !md.contains("99") && !md.contains("- 99"),
+            "Vec<u8> must not dump as a number array, got {md}"
+        );
+        let back: BytesDoc = crate::from_str(&md).expect("round-trip");
+        assert_eq!(value, back);
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn serialize_bytes_body_is_raw_utf8() {
+        let value = ByteBufDoc {
+            title: "bin".into(),
+            data: ByteField(b"hello".to_vec()),
+        };
+        let md = to_string(&value).expect("serialize");
+        assert!(md.contains("```\nhello\n"), "{md}");
+        let back: ByteBufDoc = crate::from_str(&md).expect("round-trip");
+        assert_eq!(value, back);
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn invalid_utf8_byte_body_is_body() {
+        let value = BytesDoc {
+            title: "bin".into(),
+            data: vec![0xff, b'a'],
+        };
+        let err = to_string(&value).expect_err("utf8");
+        assert_eq!(err.kind(), ErrorKind::Body);
+        assert!(std::error::Error::source(&err).is_none());
+        assert!(err.to_string().contains("UTF-8"), "{err}");
+
+        let via_bytes = ByteBufDoc {
+            title: "bin".into(),
+            data: ByteField(vec![0xff]),
+        };
+        let err = to_string(&via_bytes).expect_err("serialize_bytes utf8");
+        assert_eq!(err.kind(), ErrorKind::Body);
     }
 
     #[cfg(not(feature = "yaml"))]

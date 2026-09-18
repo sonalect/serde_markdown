@@ -46,7 +46,7 @@ pub fn from_str<T>(s: &str) -> Result<T, Error>
 where
     T: DeserializeOwned + Markdown,
 {
-    let decoded = decode_document(parse::parse(s))?;
+    let decoded = decode_document(parse::parse(s)?)?;
     if decoded.body.len() > T::BODY_FIELDS.len() {
         return Err(Error::body(format!(
             "expected at most {} body section(s), found {}",
@@ -400,9 +400,46 @@ impl<'de> Deserializer<'de> for SectionDeserializer {
         visitor.visit_unit()
     }
 
+    fn deserialize_seq<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        match self.slot {
+            SectionSlot::Absent => Err(Error::body("missing section")),
+            SectionSlot::Empty => visitor.visit_seq(JsonSeq {
+                iter: Vec::new().into_iter(),
+            }),
+            SectionSlot::Text(text) => match format::load_body(&text, self.format) {
+                Ok(Value::Array(arr)) => visitor.visit_seq(JsonSeq {
+                    iter: arr.into_iter(),
+                }),
+                _ => visitor.visit_seq(ByteSeq {
+                    iter: text.into_bytes().into_iter(),
+                }),
+            },
+        }
+    }
+
     serde::forward_to_deserialize_any! {
         bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char unit unit_struct
-        seq tuple tuple_struct map struct enum newtype_struct identifier
+        tuple tuple_struct map struct enum newtype_struct identifier
+    }
+}
+
+struct ByteSeq {
+    iter: vec::IntoIter<u8>,
+}
+
+impl<'de> SeqAccess<'de> for ByteSeq {
+    type Error = Error;
+
+    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Error>
+    where
+        T: DeserializeSeed<'de>,
+    {
+        match self.iter.next() {
+            Some(b) => seed
+                .deserialize(JsonDe(Value::Number(u64::from(b).into())))
+                .map(Some),
+            None => Ok(None),
+        }
     }
 }
 
@@ -987,5 +1024,21 @@ mod tests {
         let err = from_reader::<_, types::FieldsOnly>([0xff, b'a'].as_slice()).expect_err("utf8");
         assert_eq!(err.kind(), ErrorKind::Syntax);
         assert_eq!(err.offset(), Some(0));
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn unclosed_fence_from_str_is_syntax() {
+        let err = from_str::<types::FieldsOnly>("```yaml\nname: only\n").expect_err("unclosed");
+        assert_eq!(err.kind(), ErrorKind::Syntax);
+        assert_eq!(err.offset(), Some(0));
+        assert!(std::error::Error::source(&err).is_none());
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn empty_input_missing_required_body_is_body() {
+        let err = from_str::<types::Page>("").expect_err("empty");
+        assert_eq!(err.kind(), ErrorKind::Body);
     }
 }

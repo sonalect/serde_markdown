@@ -1,11 +1,14 @@
 //! CommonMark split of a Markdown document into a fields slice and body sections.
 //!
 //! This module does **not** parse YAML, JSON, or TOML. Unlabeled fences and
-//! bare first slices only get a sniff hint.
+//! bare first slices only get a sniff hint. An unclosed fenced code block is
+//! [`crate::ErrorKind::Syntax`] with a byte offset.
 
 use std::ops::Range;
 
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
+
+use crate::error::Error;
 
 /// Shape-based guess for an unlabeled fence or a bare first slice.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -36,24 +39,28 @@ pub(crate) struct Document {
     pub body: Vec<String>,
 }
 
-pub(crate) fn parse(input: &str) -> Document {
+pub(crate) fn parse(input: &str) -> Result<Document, Error> {
     let events: Vec<(Event<'_>, Range<usize>)> = Parser::new_ext(input, parser_options())
         .into_offset_iter()
         .collect();
+
+    if let Some(offset) = unclosed_fence_offset(input, &events) {
+        return Err(Error::syntax(offset, "unclosed fence"));
+    }
 
     let dash_rules = top_level_dash_rules(input, &events);
     let content_start = skip_prefix(input, &dash_rules);
 
     if let Some(fence) = leading_fields_fence(input, &events, content_start) {
         let body = split_body(input, fence.body_start, &dash_rules);
-        return Document {
+        return Ok(Document {
             fields: Fields::Fenced {
                 labeled: fence.labeled,
                 sniff: fence.sniff,
                 inner: fence.inner,
             },
             body,
-        };
+        });
     }
 
     let next_rule = dash_rules
@@ -66,10 +73,86 @@ pub(crate) fn parse(input: &str) -> Document {
     };
     let sniff = sniff(&inner);
     let body = split_body(input, body_start, &dash_rules);
-    Document {
+    Ok(Document {
         fields: Fields::Bare { sniff, inner },
         body,
+    })
+}
+
+fn unclosed_fence_offset(input: &str, events: &[(Event<'_>, Range<usize>)]) -> Option<usize> {
+    for (i, (event, range)) in events.iter().enumerate() {
+        let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(_))) = event else {
+            continue;
+        };
+        let end_idx = matching_code_block_end(events, i);
+        let end = events
+            .get(end_idx)
+            .map(|(_, r)| r.end)
+            .unwrap_or(input.len())
+            .max(range.end)
+            .min(input.len());
+        if !fenced_block_has_closer(&input[range.start..end]) {
+            return Some(range.start);
+        }
     }
+    None
+}
+
+/// Opening fence plus a last line that is a CommonMark closing fence of the
+/// same character and at least the same length.
+fn fenced_block_has_closer(src: &str) -> bool {
+    let trimmed = src.trim_end_matches(['\n', '\r']);
+    let Some(first_nl) = trimmed.find('\n') else {
+        return false;
+    };
+    let opener = &trimmed[..first_nl];
+    let Some((ch, n)) = fence_opener(opener) else {
+        return false;
+    };
+    let rest = trimmed[first_nl + 1..].trim_start_matches('\r');
+    let last = match rest.rsplit_once('\n') {
+        Some((_, last)) => last.trim_end_matches('\r'),
+        None => rest.trim_end_matches('\r'),
+    };
+    is_fence_closer(last, ch, n)
+}
+
+fn fence_opener(line: &str) -> Option<(u8, usize)> {
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() && i < 3 && bytes[i] == b' ' {
+        i += 1;
+    }
+    let ch = *bytes.get(i)?;
+    if ch != b'`' && ch != b'~' {
+        return None;
+    }
+    let start = i;
+    while i < bytes.len() && bytes[i] == ch {
+        i += 1;
+    }
+    let n = i - start;
+    if n < 3 {
+        return None;
+    }
+    Some((ch, n))
+}
+
+fn is_fence_closer(line: &str, ch: u8, min: usize) -> bool {
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() && i < 3 && bytes[i] == b' ' {
+        i += 1;
+    }
+    let start = i;
+    while i < bytes.len() && bytes[i] == ch {
+        i += 1;
+    }
+    let n = i - start;
+    if n < min {
+        return false;
+    }
+    bytes[i..].iter().all(|b| *b == b' ' || *b == b'\t')
 }
 
 fn parser_options() -> Options {
@@ -128,7 +211,7 @@ fn top_level_dash_rules(input: &str, events: &[(Event<'_>, Range<usize>)]) -> Ve
 }
 
 /// CommonMark turns `paragraph\n---` into a setext H2, not `Event::Rule`.
-/// That underline is still a top-level dash separator (DESIGN.md §2.7).
+/// That underline is still a top-level dash separator.
 fn setext_dash_underline(input: &str, heading: Range<usize>) -> Option<Range<usize>> {
     let src = &input[heading.clone()];
     let first_line_end = src.find('\n').unwrap_or(src.len());
@@ -388,6 +471,10 @@ mod tests {
         }
     }
 
+    fn parse_ok(input: &str) -> Document {
+        parse(input).unwrap_or_else(|err| panic!("{err}"))
+    }
+
     #[test]
     fn sniff_empty_is_yaml() {
         assert_eq!(sniff(""), Sniff::Yaml);
@@ -413,7 +500,7 @@ mod tests {
 
     #[test]
     fn page_fenced_yaml() {
-        let doc = parse(goldens::PAGE_FENCED_YAML);
+        let doc = parse_ok(goldens::PAGE_FENCED_YAML);
         let (labeled, sniff, inner) = fenced(&doc);
         assert_eq!(*labeled, Some(Sniff::Yaml));
         assert_eq!(sniff, Sniff::Yaml);
@@ -430,7 +517,7 @@ mod tests {
 
     #[test]
     fn page_fenced_yml_tag() {
-        let doc = parse(goldens::PAGE_FENCED_YML);
+        let doc = parse_ok(goldens::PAGE_FENCED_YML);
         let (labeled, sniff, _) = fenced(&doc);
         assert_eq!(*labeled, Some(Sniff::Yaml));
         assert_eq!(sniff, Sniff::Yaml);
@@ -439,14 +526,14 @@ mod tests {
 
     #[test]
     fn page_fenced_json_and_toml_tags() {
-        let json = parse(goldens::PAGE_FENCED_JSON);
+        let json = parse_ok(goldens::PAGE_FENCED_JSON);
         let (labeled, sniff, inner) = fenced(&json);
         assert_eq!(*labeled, Some(Sniff::Json));
         assert_eq!(sniff, Sniff::Json);
         assert!(inner.contains("\"field1\""));
         assert_eq!(json.body.len(), 2);
 
-        let toml = parse(goldens::PAGE_FENCED_TOML);
+        let toml = parse_ok(goldens::PAGE_FENCED_TOML);
         let (labeled, sniff, inner) = fenced(&toml);
         assert_eq!(*labeled, Some(Sniff::Toml));
         assert_eq!(sniff, Sniff::Toml);
@@ -456,18 +543,18 @@ mod tests {
 
     #[test]
     fn unlabeled_fence_sniffs() {
-        let yaml = parse(goldens::PAGE_UNLABELED_YAML);
+        let yaml = parse_ok(goldens::PAGE_UNLABELED_YAML);
         let (labeled, sniff, _) = fenced(&yaml);
         assert_eq!(*labeled, None);
         assert_eq!(sniff, Sniff::Yaml);
         assert_eq!(yaml.body.len(), 2);
 
-        let json = parse(goldens::PAGE_UNLABELED_JSON);
+        let json = parse_ok(goldens::PAGE_UNLABELED_JSON);
         let (labeled, sniff, _) = fenced(&json);
         assert_eq!(*labeled, None);
         assert_eq!(sniff, Sniff::Json);
 
-        let toml = parse(goldens::PAGE_UNLABELED_TOML);
+        let toml = parse_ok(goldens::PAGE_UNLABELED_TOML);
         let (labeled, sniff, _) = fenced(&toml);
         assert_eq!(*labeled, None);
         assert_eq!(sniff, Sniff::Toml);
@@ -475,7 +562,7 @@ mod tests {
 
     #[test]
     fn leading_prefix_dash_is_discarded() {
-        let doc = parse(goldens::PAGE_LEADING_PREFIX);
+        let doc = parse_ok(goldens::PAGE_LEADING_PREFIX);
         let (labeled, _, _) = fenced(&doc);
         assert_eq!(*labeled, Some(Sniff::Yaml));
         assert_eq!(doc.body.len(), 2);
@@ -485,7 +572,7 @@ mod tests {
 
     #[test]
     fn fence_not_first_is_bare_candidate() {
-        let doc = parse(goldens::PAGE_FENCE_NOT_FIRST);
+        let doc = parse_ok(goldens::PAGE_FENCE_NOT_FIRST);
         let (sniff, inner) = bare(&doc);
         assert_eq!(sniff, Sniff::Yaml);
         assert!(inner.contains("Intro paragraph"));
@@ -495,18 +582,18 @@ mod tests {
 
     #[test]
     fn bare_slices_sniff() {
-        let yaml = parse(goldens::PAGE_BARE_YAML);
+        let yaml = parse_ok(goldens::PAGE_BARE_YAML);
         let (sniff, inner) = bare(&yaml);
         assert_eq!(sniff, Sniff::Yaml);
         assert!(inner.contains("field1: foo"));
         assert_eq!(yaml.body.len(), 2);
 
-        let json = parse(goldens::PAGE_BARE_JSON);
+        let json = parse_ok(goldens::PAGE_BARE_JSON);
         let (sniff, _) = bare(&json);
         assert_eq!(sniff, Sniff::Json);
         assert_eq!(json.body.len(), 2);
 
-        let toml = parse(goldens::PAGE_BARE_TOML);
+        let toml = parse_ok(goldens::PAGE_BARE_TOML);
         let (sniff, _) = bare(&toml);
         assert_eq!(sniff, Sniff::Toml);
         assert_eq!(toml.body.len(), 2);
@@ -514,7 +601,7 @@ mod tests {
 
     #[test]
     fn dash_inside_body_fence_does_not_split() {
-        let doc = parse(goldens::PAGE_SPLIT_FENCE);
+        let doc = parse_ok(goldens::PAGE_SPLIT_FENCE);
         assert_eq!(doc.body.len(), 2);
         assert!(doc.body[0].contains("---"));
         assert!(doc.body[0].contains("not a split"));
@@ -523,7 +610,7 @@ mod tests {
 
     #[test]
     fn stars_and_underscores_do_not_split() {
-        let doc = parse(goldens::PAGE_SPLIT_STARS);
+        let doc = parse_ok(goldens::PAGE_SPLIT_STARS);
         assert_eq!(doc.body.len(), 2);
         assert!(doc.body[0].contains("***"));
         assert!(doc.body[0].contains("___"));
@@ -533,7 +620,7 @@ mod tests {
 
     #[test]
     fn dash_in_list_item_does_not_split() {
-        let doc = parse(goldens::PAGE_SPLIT_LIST);
+        let doc = parse_ok(goldens::PAGE_SPLIT_LIST);
         assert_eq!(doc.body.len(), 2);
         assert!(doc.body[0].contains("keep going"));
         assert!(doc.body[0].contains("---"));
@@ -542,7 +629,7 @@ mod tests {
 
     #[test]
     fn fields_only_fenced_has_no_body() {
-        let doc = parse(goldens::FIELDS_ONLY_FENCED_YAML);
+        let doc = parse_ok(goldens::FIELDS_ONLY_FENCED_YAML);
         let (labeled, _, inner) = fenced(&doc);
         assert_eq!(*labeled, Some(Sniff::Yaml));
         assert!(inner.contains("name: only"));
@@ -551,7 +638,7 @@ mod tests {
 
     #[test]
     fn fields_only_bare_is_whole_file() {
-        let doc = parse(goldens::FIELDS_ONLY_BARE_YAML);
+        let doc = parse_ok(goldens::FIELDS_ONLY_BARE_YAML);
         let (sniff, inner) = bare(&doc);
         assert_eq!(sniff, Sniff::Yaml);
         assert!(inner.contains("name: only"));
@@ -560,7 +647,7 @@ mod tests {
 
     #[test]
     fn body_only_is_bare_candidate_then_one_section() {
-        let doc = parse(goldens::BODY_ONLY_TWO_SECTIONS);
+        let doc = parse_ok(goldens::BODY_ONLY_TWO_SECTIONS);
         let (sniff, inner) = bare(&doc);
         assert_eq!(sniff, Sniff::Yaml);
         assert_eq!(inner.trim(), "Text1 bla bla bla");
@@ -570,7 +657,7 @@ mod tests {
 
     #[test]
     fn optional_middle_none_keeps_empty_slot() {
-        let doc = parse(goldens::OPTIONAL_MIDDLE_NONE);
+        let doc = parse_ok(goldens::OPTIONAL_MIDDLE_NONE);
         assert_eq!(doc.body.len(), 3);
         assert_eq!(doc.body[0].trim(), "a");
         assert!(doc.body[1].trim().is_empty());
@@ -579,7 +666,7 @@ mod tests {
 
     #[test]
     fn optional_leading_none_empty_first_section() {
-        let doc = parse(goldens::OPTIONAL_LEADING_NONE);
+        let doc = parse_ok(goldens::OPTIONAL_LEADING_NONE);
         assert_eq!(doc.body.len(), 2);
         assert!(doc.body[0].trim().is_empty());
         assert_eq!(doc.body[1].trim(), "a");
@@ -588,7 +675,7 @@ mod tests {
     #[test]
     fn rust_info_string_is_not_fields_fence() {
         let input = "```rust\nlet x = 1;\n```\n";
-        let doc = parse(input);
+        let doc = parse_ok(input);
         let (sniff, inner) = bare(&doc);
         assert_eq!(sniff, Sniff::Yaml);
         assert!(inner.contains("```rust"));
@@ -598,7 +685,7 @@ mod tests {
     #[test]
     fn tilde_yaml_fence_is_fields() {
         let input = "~~~yaml\nfield1: foo\n~~~\nbody\n";
-        let doc = parse(input);
+        let doc = parse_ok(input);
         let (labeled, _, inner) = fenced(&doc);
         assert_eq!(*labeled, Some(Sniff::Yaml));
         assert!(inner.contains("field1: foo"));
@@ -609,7 +696,7 @@ mod tests {
     #[test]
     fn atx_heading_is_not_a_split() {
         let input = "```yaml\nk: 1\n```\n## still section one\ntext\n---\nsection two\n";
-        let doc = parse(input);
+        let doc = parse_ok(input);
         assert_eq!(doc.body.len(), 2);
         assert!(doc.body[0].contains("## still section one"));
         assert_eq!(doc.body[1].trim(), "section two");
@@ -618,7 +705,7 @@ mod tests {
     #[test]
     fn blank_line_dash_is_rule_split() {
         let input = "```yaml\nk: 1\n```\npara\n\n---\n\nnext\n";
-        let doc = parse(input);
+        let doc = parse_ok(input);
         assert_eq!(doc.body.len(), 2);
         assert_eq!(doc.body[0].trim(), "para");
         assert_eq!(doc.body[1].trim(), "next");
@@ -630,5 +717,35 @@ mod tests {
         assert!(is_dash_thematic_break("  - - -\n"));
         assert!(!is_dash_thematic_break("***\n"));
         assert!(!is_dash_thematic_break("___\n"));
+    }
+
+    #[test]
+    fn unclosed_fields_fence_is_syntax() {
+        let err = parse("```yaml\nfield1: foo\n").expect_err("unclosed");
+        assert_eq!(err.kind(), crate::ErrorKind::Syntax);
+        assert_eq!(err.offset(), Some(0));
+        assert!(err.to_string().contains("unclosed fence"), "{err}");
+    }
+
+    #[test]
+    fn unclosed_body_fence_is_syntax() {
+        let input = "```yaml\nk: 1\n```\nsee\n```text\n---\n";
+        let err = parse(input).expect_err("unclosed body fence");
+        assert_eq!(err.kind(), crate::ErrorKind::Syntax);
+        assert!(err.offset().is_some());
+    }
+
+    #[test]
+    fn dash_in_blockquote_does_not_split() {
+        let input = "```yaml\nk: 1\n```\n> ---\nstill section one\n---\nsection two\n";
+        let doc = parse_ok(input);
+        assert_eq!(doc.body.len(), 2);
+        assert!(doc.body[0].contains("---"), "{:?}", doc.body[0]);
+        assert!(
+            doc.body[0].contains("still section one"),
+            "{:?}",
+            doc.body[0]
+        );
+        assert_eq!(doc.body[1].trim(), "section two");
     }
 }
