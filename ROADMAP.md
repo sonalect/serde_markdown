@@ -111,9 +111,9 @@ Open questions in DESIGN.md: none.
 
 Runnable crates are [`rust/examples/page`](rust/examples/page) (hand-written
 struct) and [`rust/examples/protobuf`](rust/examples/protobuf) (protobuf
-`Page`, generated with Buf + buffa like `proto/markdown`). Both print the
-same fenced YAML document. How to run them is in [README.md](README.md).
-M15 ships those crates.
+`Page`, compiled in that crate's `build.rs` with `buffa_build` and
+`annotate_markdown_body`). Both print the same fenced YAML document. How
+to run them is in [README.md](README.md). M15 ships those crates.
 
 ---
 
@@ -534,16 +534,17 @@ embed those programs in this file. Mapping is unchanged.
       `bazel run //rust/examples/page` print DESIGN.md §2.1 (labeled
       `yaml` fence, two body sections) and round-trip `from_str`.
 - [x] `rust/examples/protobuf`: proto3 `package example` message with
-      `(markdown.body) = true` on `text1` / `text2`. Compiled like
-      `proto/markdown`: `buf_generate` + buffa plugins into
-      `rust/examples/protobuf/generated`, `Markdown` impl in the example
-      crate (`BODY_FIELDS` is `["text1", "text2"]`). Same Markdown as the
-      struct example. `cargo run -p example-protobuf` and
-      `bazel run //rust/examples/protobuf`.
+      `(markdown.body) = true` on `text1` / `text2`. Consumer path:
+      `build.rs` + `buffa_build` + `annotate_markdown_body` (no checked-in
+      `generated/`, no manual `Markdown` impl). Bazel:
+      `cargo_build_script` + proto toolchain prebuilt (`protoc_prefix`).
+      `BODY_FIELDS` is `["text1", "text2"]` from the derive. Same Markdown
+      as the struct example. `cargo run -p example-protobuf` (needs
+      `PROTOC`) and `bazel run //rust/examples/protobuf`.
 - [x] README and DESIGN.md layout name `rust/examples/`. This file's
       dashboard row is this stage. Tests cover both binaries
       (round-trip and the printed document).
-- [x] `bazel test //...` green (includes `//rust:lint`). Owner has
+- [ ] `bazel test //...` green (includes `//rust:lint`). Owner has
       reviewed.
 
 **Review:** runnable examples. Stop.

@@ -3,7 +3,6 @@ exports_files([
     "Cargo.lock",
     "Cargo.toml",
     "buf.yaml",
-    "buf.markdown.yaml",
     "buf.gen.rust.yaml",
     ".markdownlint-cli2.yaml",
 ])

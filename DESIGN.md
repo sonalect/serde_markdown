@@ -398,7 +398,11 @@ let fds = /* FileDescriptorSet */;
 let attrs = serde_markdown::buffa::annotate_markdown_body(&fds);
 let mut config = buffa_build::Config::new()
     .files(&["proto/page.proto"])
-    .includes(&["proto/", serde_markdown::PROTO_INCLUDE])
+    .includes(&[
+        "proto/",
+        serde_markdown::PROTO_INCLUDE,
+        // directory that contains `google/protobuf/descriptor.proto`
+    ])
     .generate_json(true);
 for (path, attr) in attrs.message_attributes() {
     config = config.message_attribute(path, attr);
@@ -579,7 +583,7 @@ rust/serde_markdown/testdata/markdown/    # golden documents
 rust/serde_markdown/src/testdata/         # hand-written structs + values
 rust/serde_markdown_derive/               # #[derive(Markdown)]
 rust/examples/                            # runnable page + protobuf binaries
-rust/examples/protobuf/proto/             # example Page; bazel run //rust/examples/protobuf:generate
+rust/examples/protobuf/proto/             # example Page; that crate's build.rs + buffa_build
 ```
 
 ```toml
@@ -679,10 +683,10 @@ Same shape as [scheda](https://github.com/amsokol/scheda): bzlmod, `bazel_utils_
 | `MODULE.bazel` | `serde_markdown` module, `protobuf` 36.1.bcr.1, `rules_rust`, `bazel_utils_{bazel,buf,core,md,rust}` |
 | `buf.MODULE.bazel` | Buf CLI `v1.73.0` |
 | `rust.MODULE.bazel` | Rust 1.98.1 / edition 2024, crate_universe, `protoc-gen-buffa-packaging` |
-| `buf.yaml` | modules `proto/` and `rust/examples/protobuf/proto` (Buf LSP); dep `buf.build/protocolbuffers/wellknowntypes` |
-| `buf.markdown.yaml` | module `proto/` only — `//proto/markdown:generate` |
-| `buf.gen.rust.yaml` | remote `buf.build/anthropics/buffa` (`json=true`) + local packaging plugin |
+| `buf.yaml` | modules `proto/` and `rust/examples/protobuf/proto` (LSP, lint, format); dep `buf.build/protocolbuffers/wellknowntypes` |
+| `buf.gen.rust.yaml` | remote `buf.build/anthropics/buffa` (`json=true`) + local packaging plugin; `inputs` is `proto/` only |
 | `proto/markdown/BUILD.bazel` | `buf_module`, lint, format, generate → `rust/generated/markdown` |
+| `rust/examples/protobuf` | consumer-shaped `build.rs` (`buffa_build` + `annotate_markdown_body`); Bazel `cargo_build_script` + `protoc_prefix` from the proto toolchain prebuilt (not `@protobuf//:protoc`). No checked-in stubs. `cargo run -p example-protobuf` needs `PROTOC`. |
 
 Commands:
 
@@ -698,7 +702,7 @@ bazel test //bazel:markdown
 bazel run //bazel:format
 ```
 
-`annotate_markdown_body` applies for consumers who compile their own `.proto` files. This repo’s fixtures in `proto/markdown/testdata/` (`markdown.testdata.*`) are compiled here so WKT + `(markdown.body)` round-trips can be tested against generated buffa types. They are not part of the public `markdown` proto API. Matching golden Markdown lives in `rust/serde_markdown/testdata/markdown/`; hand-written structs are `serde_markdown` test-only types in `src/testdata/`.
+`annotate_markdown_body` applies for consumers who compile their own `.proto` files. The in-tree protobuf example is that path. This repo’s fixtures in `proto/markdown/testdata/` (`markdown.testdata.*`) stay on Buf generate into `rust/generated` so WKT + `(markdown.body)` round-trips can be tested against generated buffa types. They are not part of the public `markdown` proto API. Matching golden Markdown lives in `rust/serde_markdown/testdata/markdown/`; hand-written structs are `serde_markdown` test-only types in `src/testdata/`.
 
 Downstream Bazel users depend on the published proto as a Buf module (`markdown/options.proto`) the same way scheda consumers import `api/v1`.
 

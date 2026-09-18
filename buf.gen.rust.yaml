@@ -1,4 +1,7 @@
 version: v2
+# Workspace buf.yaml also lists the protobuf example; generate only proto/.
+inputs:
+  - directory: proto
 plugins:
   - remote: buf.build/anthropics/buffa:v0.9.2
     out: rust/generated/markdown

@@ -1,4 +1,4 @@
-# Workspace buf config (Buf LSP and the protobuf example generate).
+# Workspace buf config (Buf LSP).
 # `proto/` is the public/testdata module; imports are `markdown/options.proto`.
 # `rust/examples/protobuf/proto` is the example Page (same import).
 version: v2

@@ -15,8 +15,11 @@ filegroup(
 
 buf_module(
     name = "module",
-    srcs = [":protos"],
-    config = "//:buf.markdown.yaml",
+    srcs = [
+        ":protos",
+        "//rust/examples/protobuf:protos",
+    ],
+    config = "//:buf.yaml",
     visibility = ["//visibility:public"],
 )
 

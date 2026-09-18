@@ -1,53 +1,61 @@
-load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
-load("@bazel_utils_buf//:buf.bzl", "buf_generate", "buf_module")
+load("@bazel_utils_buf//:protoc_prefix.bzl", "protoc_prefix")
+load("@rules_rust//cargo:defs.bzl", "cargo_build_script")
 load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
 
-exports_files([
-    "Cargo.toml",
-    # Destination for //rust/examples/protobuf:generate → generated/.
-    "generated",
-])
+exports_files(["Cargo.toml"])
 
 filegroup(
     name = "protos",
-    srcs = glob(["proto/**/*.proto"]) + ["//proto/markdown:options.proto"],
+    srcs = glob(["proto/**/*.proto"]),
+    visibility = ["//visibility:public"],
 )
 
-buf_module(
-    name = "module",
-    srcs = [":protos"],
-    config = "//:buf.yaml",
-)
-
-buf_generate(
-    name = "rust",
-    module = ":module",
-    plugins = [
-        "//proto/markdown:protoc-gen-buffa-packaging",
+# @protobuf//:protoc is a from-source cc_binary. The proto toolchain (default
+# prefer_prebuilt_protoc) is the GitHub release; protoc_prefix stages it.
+protoc_prefix(
+    name = "protoc_prefix",
+    wkts = [
+        "@protobuf//:descriptor_proto_srcs",
+        "@protobuf//:well_known_type_protos",
     ],
-    template = ":buf.gen.yaml",
 )
 
-write_source_files(
-    name = "generate",
-    check_that_out_file_exists = False,
-    files = {
-        ":generated": ":rust",
+cargo_build_script(
+    name = "build_script",
+    srcs = ["build.rs"],
+    build_script_env = {
+        "PROTOC": "$(execpath :protoc_prefix)/bin/protoc",
+        "PROTOBUF_INCLUDE": "$(execpath :protoc_prefix)/include",
+        "SERDE_MARKDOWN_PROTO_INCLUDE": "$(execpath //proto/markdown:options.proto)/../..",
     },
+    crate_root = "build.rs",
+    data = glob(["proto/**/*.proto"]) + [
+        "//proto/markdown:options.proto",
+    ],
+    edition = "2024",
+    pkg_name = "example-protobuf",
+    tools = [":protoc_prefix"],
+    deps = [
+        "//rust/serde_markdown",
+        "@cargo//:buffa",
+        "@cargo//:buffa-build",
+    ],
 )
 
 rust_library(
     name = "lib",
     srcs = glob(
-        [
-            "src/**/*.rs",
-            "generated/**/*.rs",
-        ],
-        allow_empty = True,
+        ["src/**/*.rs"],
+        exclude = ["src/main.rs"],
     ),
     crate_name = "example_protobuf",
+    edition = "2024",
+    proc_macro_deps = [
+        "//rust/serde_markdown_derive",
+    ],
     visibility = ["//visibility:public"],
     deps = [
+        ":build_script",
         "//rust/serde_markdown",
         "@cargo//:buffa",
         "@cargo//:buffa-types",
@@ -59,6 +67,7 @@ rust_library(
 rust_binary(
     name = "protobuf",
     srcs = ["src/main.rs"],
+    edition = "2024",
     visibility = ["//visibility:public"],
     deps = [
         ":lib",

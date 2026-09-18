@@ -65,7 +65,7 @@ Both binaries print the same fenced YAML document and check
 
 ```bash
 cargo run -p example-page
-cargo run -p example-protobuf
+cargo run -p example-protobuf   # needs protoc (`PROTOC` or PATH)
 
 bazel run //rust/examples/page
 bazel run //rust/examples/protobuf
@@ -78,15 +78,19 @@ checks they match):
 
 ```bash
 bazel run //proto/markdown:generate
-bazel run //rust/examples/protobuf:generate
 ```
+
+`cargo run -p example-protobuf` compiles `rust/examples/protobuf/proto` in that
+crate's `build.rs` and needs `protoc` on `PATH` or `PROTOC`. Bazel uses the
+protobuf proto toolchain prebuilt (not `@protobuf//:protoc`, which compiles
+from source).
 
 `google/protobuf/*.proto` comes from `buf.build/protocolbuffers/wellknowntypes`.
 The workspace [`buf.yaml`](buf.yaml) lists both `proto/` and
 `rust/examples/protobuf/proto`, so Buf LSP can resolve
-`import "markdown/options.proto"` in the example. Markdown generate uses
-[`buf.markdown.yaml`](buf.markdown.yaml) (`proto/` only) so example `Page` is
-not emitted into `rust/generated`. If the Buf extension still reports
+`import "markdown/options.proto"` in the example. [`buf.gen.rust.yaml`](buf.gen.rust.yaml)
+`inputs` is `proto/` only, so example `Page` is not emitted into
+`rust/generated`. If the Buf extension still reports
 `imported file does not exist` for well-known types, run `buf dep update`
 (refreshes [`buf.lock`](buf.lock)) and reload the window.
 

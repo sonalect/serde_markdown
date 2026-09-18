@@ -105,6 +105,15 @@ API changes bump the minor.
 
 ### Changed
 
+- The protobuf example compiles its `Page` when the crate builds (`build.rs`
+  plus `annotate_markdown_body`) instead of checking in Buf
+  `write_source_files` stubs. `cargo run -p example-protobuf` needs `protoc`
+  (`PROTOC` or PATH). Bazel uses the proto toolchain prebuilt
+  (`protoc_prefix`), not `@protobuf//:protoc` (that target compiles from
+  source).
+- Buf generate/lint/format use the workspace [`buf.yaml`](buf.yaml).
+  [`buf.gen.rust.yaml`](buf.gen.rust.yaml) `inputs` keep fixture generate on
+  `proto/` only.
 - DESIGN.md, README, and this file match the shipped crate: function names
   (`from_str` is `DeserializeOwned`), feature `json = []`, derive path
   `rust/serde_markdown_derive`, error kinds and defaults. DESIGN.md §11 is
@@ -116,13 +125,15 @@ API changes bump the minor.
   envelope). Callers match `kind()`; `Syntax` has a byte offset;
   decoder and IO failures are `source()`.
 
+### Removed
+
+- `buf.markdown.yaml`. Generate, lint, and format use the workspace
+  [`buf.yaml`](buf.yaml).
+
 ### Fixed
 
-- The protobuf example compiles `rust/examples/protobuf/proto` with the same
-  Buf + buffa generate path as `proto/markdown` (`bazel run
-  //rust/examples/protobuf:generate`), not Google `proto_library` and not a
-  from-source `protoc`. The workspace `buf.yaml` lists that proto directory
-  so Buf LSP can resolve `markdown/options.proto`.
+- The workspace `buf.yaml` lists the protobuf example proto directory so Buf
+  LSP can resolve `markdown/options.proto`.
 
 ## Links
 
