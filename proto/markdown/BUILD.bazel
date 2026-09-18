@@ -38,10 +38,6 @@ buf_format(
 buf_generate(
     name = "rust",
     module = ":module",
-    plugins = [
-        "@bazel_utils_buf//protoc/plugins/protoc-gen-buffa",
-        "@bazel_utils_buf//protoc/plugins/protoc-gen-buffa-packaging",
-    ],
     template = "//:buf.gen.rust.yaml",
 )
 

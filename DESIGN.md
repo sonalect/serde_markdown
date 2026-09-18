@@ -676,7 +676,7 @@ under `rust/serde_markdown/`.
 
 ## 6.5 Bazel and Buf
 
-Same shape as [scheda](https://github.com/amsokol/scheda): bzlmod, `bazel_utils_*`, hermetic Buf, buffa plugins, `write_source_files` back into the tree.
+bzlmod, `bazel_utils_*`, hermetic Buf, buffa plugins, `write_source_files` back into the tree.
 
 | Path | Role |
 | --- | --- |
@@ -685,7 +685,7 @@ Same shape as [scheda](https://github.com/amsokol/scheda): bzlmod, `bazel_utils_
 | `rust.MODULE.bazel` | Rust 1.98.1 / edition 2024, crate_universe (workspace crates only) |
 | `buf.yaml` | modules `proto/` and `rust/examples/protobuf/proto` (LSP, lint, format); dep `buf.build/protocolbuffers/wellknowntypes` |
 | `buf.gen.rust.yaml` | local `protoc-gen-buffa` (`json=true`) + local `protoc-gen-buffa-packaging`; `inputs` is `proto/` only |
-| `proto/markdown/BUILD.bazel` | `buf_module`, lint, format, generate → `rust/generated/markdown` |
+| `proto/markdown/BUILD.bazel` | `buf_module`, lint, format, generate → `rust/generated/markdown` (`protoc.plugin` tags on PATH) |
 | `rust/examples/protobuf` | consumer-shaped `build.rs` (`buffa_build` + `annotate_markdown_body`); Bazel `cargo_build_script` + `protoc_prefix` from the proto toolchain prebuilt (not `@protobuf//:protoc`). No checked-in stubs. `cargo run -p example-protobuf` needs `PROTOC`. |
 
 Commands:
@@ -704,7 +704,7 @@ bazel run //bazel:format
 
 `annotate_markdown_body` applies for consumers who compile their own `.proto` files. The in-tree protobuf example is that path. This repo’s fixtures in `proto/markdown/testdata/` (`markdown.testdata.*`) stay on Buf generate into `rust/generated` so WKT + `(markdown.body)` round-trips can be tested against generated buffa types. They are not part of the public `markdown` proto API. Matching golden Markdown lives in `rust/serde_markdown/testdata/markdown/`; hand-written structs are `serde_markdown` test-only types in `src/testdata/`.
 
-Downstream Bazel users depend on the published proto as a Buf module (`markdown/options.proto`) the same way scheda consumers import `api/v1`.
+Downstream Bazel users depend on the published proto as a Buf module (`markdown/options.proto`).
 
 ## 7. Errors
 
@@ -783,7 +783,7 @@ Exact `Display` wording lives in rustdoc. `FormatDisabled` displays as `format n
 - Forking `buffa-codegen`.
 - Treating proto `bytes` body fields as raw UTF-8 (they stay proto JSON base64 unless we add an opt-in later).
 - `thiserror` / `anyhow` for the crate `Error`.
-- A protobuf / scheda-style error envelope (`code`, `path`, `repeat`, `stack`).
+- A protobuf error envelope (`code`, `path`, `repeat`, `stack`).
 
 ## 11. Implementation order
 

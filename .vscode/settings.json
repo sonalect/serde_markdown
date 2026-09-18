@@ -9,7 +9,6 @@
     "protocolbuffers",
     "rustdoc",
     "RUSTSEC",
-    "scheda",
     "serde",
     "wellknowntypes"
   ]
