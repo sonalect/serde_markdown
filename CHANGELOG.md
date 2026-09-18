@@ -8,6 +8,8 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-09-18
+
 ### Added
 
 - Design for a Serde format crate that maps a root struct to a Markdown
@@ -144,5 +146,7 @@ API changes bump the minor.
 ## Links
 
 - [Unreleased]
+- [0.1.0]
 
-[Unreleased]: https://github.com/sonalect/serde_markdown/commits/HEAD
+[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/sonalect/serde_markdown/releases/tag/v0.1.0
