@@ -1,0 +1,16 @@
+# Copied into generate/lint workdirs. Module root is `proto/` only so
+# rust/generated does not also emit the example Page.
+version: v2
+modules:
+  - path: proto
+deps:
+  - buf.build/protocolbuffers/wellknowntypes:v36.1
+lint:
+  use:
+    - STANDARD
+  except:
+    # Public option package is `markdown`, not `markdown.v1`.
+    - PACKAGE_VERSION_SUFFIX
+breaking:
+  use:
+    - FILE

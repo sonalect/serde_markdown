@@ -47,7 +47,7 @@ Also `to_vec` / `to_writer`. Feature `buffa` (off-default) adds
 | Path | Role |
 | --- | --- |
 | [`DESIGN.md`](DESIGN.md) | Format, mapping, proto options, Bazel |
-| [`ROADMAP.md`](ROADMAP.md) | Work order: parse, ser/de, derive, buffa (M0–M14) |
+| [`ROADMAP.md`](ROADMAP.md) | Work order: parse, ser/de, derive, buffa, examples (M0–M15) |
 | [`CHANGELOG.md`](CHANGELOG.md) | Notable changes |
 | [`proto/markdown`](proto/markdown) | Public `(markdown.body)` option |
 | [`proto/markdown/testdata`](proto/markdown/testdata) | Fixture messages (not public API) |
@@ -55,7 +55,21 @@ Also `to_vec` / `to_writer`. Feature `buffa` (off-default) adds
 | [`rust/generated`](rust/generated) | Buffa stubs from `proto/markdown` |
 | [`rust/serde_markdown`](rust/serde_markdown) | Format crate |
 | [`rust/serde_markdown_derive`](rust/serde_markdown_derive) | `#[derive(Markdown)]` |
+| [`rust/examples`](rust/examples) | Runnable `example-page` and `example-protobuf` |
 | [`MODULE.bazel`](MODULE.bazel) | Bazel module: Rust, Buf, linters |
+
+## Examples
+
+Both binaries print the same fenced YAML document and check
+`from_str(to_string(x)) == x`:
+
+```bash
+cargo run -p example-page
+cargo run -p example-protobuf
+
+bazel run //rust/examples/page
+bazel run //rust/examples/protobuf
+```
 
 ## Proto generate
 
@@ -64,10 +78,16 @@ checks they match):
 
 ```bash
 bazel run //proto/markdown:generate
+bazel run //rust/examples/protobuf:generate
 ```
 
 `google/protobuf/*.proto` comes from `buf.build/protocolbuffers/wellknowntypes`.
-If the Buf extension reports `imported file does not exist`, run `buf dep update`
+The workspace [`buf.yaml`](buf.yaml) lists both `proto/` and
+`rust/examples/protobuf/proto`, so Buf LSP can resolve
+`import "markdown/options.proto"` in the example. Markdown generate uses
+[`buf.markdown.yaml`](buf.markdown.yaml) (`proto/` only) so example `Page` is
+not emitted into `rust/generated`. If the Buf extension still reports
+`imported file does not exist` for well-known types, run `buf dep update`
 (refreshes [`buf.lock`](buf.lock)) and reload the window.
 
 ## Lint and format

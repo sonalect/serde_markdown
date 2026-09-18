@@ -1,0 +1,73 @@
+load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
+load("@bazel_utils_buf//:buf.bzl", "buf_generate", "buf_module")
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+exports_files([
+    "Cargo.toml",
+    # Destination for //rust/examples/protobuf:generate → generated/.
+    "generated",
+])
+
+filegroup(
+    name = "protos",
+    srcs = glob(["proto/**/*.proto"]) + ["//proto/markdown:options.proto"],
+)
+
+buf_module(
+    name = "module",
+    srcs = [":protos"],
+    config = "//:buf.yaml",
+)
+
+buf_generate(
+    name = "rust",
+    module = ":module",
+    plugins = [
+        "//proto/markdown:protoc-gen-buffa-packaging",
+    ],
+    template = ":buf.gen.yaml",
+)
+
+write_source_files(
+    name = "generate",
+    check_that_out_file_exists = False,
+    files = {
+        ":generated": ":rust",
+    },
+)
+
+rust_library(
+    name = "lib",
+    srcs = glob(
+        [
+            "src/**/*.rs",
+            "generated/**/*.rs",
+        ],
+        allow_empty = True,
+    ),
+    crate_name = "example_protobuf",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//rust/serde_markdown",
+        "@cargo//:buffa",
+        "@cargo//:buffa-types",
+        "@cargo//:serde",
+        "@cargo//:serde_json",
+    ],
+)
+
+rust_binary(
+    name = "protobuf",
+    srcs = ["src/main.rs"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":lib",
+        "//rust/serde_markdown",
+    ],
+)
+
+rust_test(
+    name = "lib_test",
+    crate = ":lib",
+    visibility = ["//rust:__pkg__"],
+)

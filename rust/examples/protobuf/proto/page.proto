@@ -1,0 +1,12 @@
+syntax = "proto3";
+package example;
+
+import "markdown/options.proto";
+
+message Page {
+  string field1 = 1;
+  string field2 = 2;
+  int32 field3 = 3;
+  string text1 = 4 [(markdown.body) = true];
+  string text2 = 5 [(markdown.body) = true];
+}

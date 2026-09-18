@@ -2,6 +2,11 @@ load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
 load("@bazel_utils_buf//:buf.bzl", "buf_format", "buf_generate", "buf_lint_test", "buf_module", "buf_plugin")
 load("//bazel:compat.bzl", "NOT_WINDOWS")
 
+exports_files(
+    ["options.proto"],
+    visibility = ["//visibility:public"],
+)
+
 filegroup(
     name = "protos",
     srcs = glob(["**/*.proto"]),
@@ -11,6 +16,7 @@ filegroup(
 buf_module(
     name = "module",
     srcs = [":protos"],
+    config = "//:buf.markdown.yaml",
     visibility = ["//visibility:public"],
 )
 
@@ -29,6 +35,7 @@ buf_format(
 buf_plugin(
     name = "protoc-gen-buffa-packaging",
     actual = "@cargo//:protoc-gen-buffa-packaging__protoc-gen-buffa-packaging",
+    visibility = ["//visibility:public"],
 )
 
 buf_generate(

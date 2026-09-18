@@ -1,0 +1,33 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+exports_files(["Cargo.toml"])
+
+rust_library(
+    name = "lib",
+    srcs = ["src/lib.rs"],
+    crate_name = "example_page",
+    proc_macro_deps = [
+        "//rust/serde_markdown_derive",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//rust/serde_markdown",
+        "@cargo//:serde",
+    ],
+)
+
+rust_binary(
+    name = "page",
+    srcs = ["src/main.rs"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":lib",
+        "//rust/serde_markdown",
+    ],
+)
+
+rust_test(
+    name = "lib_test",
+    crate = ":lib",
+    visibility = ["//rust:__pkg__"],
+)

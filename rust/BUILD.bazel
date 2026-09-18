@@ -6,6 +6,12 @@ rust_clippy_test(
     name = "lint",
     size = "small",
     targets = [
+        "//rust/examples/page:lib",
+        "//rust/examples/page:lib_test",
+        "//rust/examples/page:page",
+        "//rust/examples/protobuf:lib",
+        "//rust/examples/protobuf:lib_test",
+        "//rust/examples/protobuf:protobuf",
         "//rust/generated:generated",
         "//rust/generated:generated_test",
         "//rust/serde_markdown:serde_markdown",

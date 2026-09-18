@@ -1,8 +1,10 @@
-# Workspace buf config. Generate/lint copy this file; BSR deps stay remote.
-# Module root is `proto/`, so imports are `markdown/options.proto`.
+# Workspace buf config (Buf LSP and the protobuf example generate).
+# `proto/` is the public/testdata module; imports are `markdown/options.proto`.
+# `rust/examples/protobuf/proto` is the example Page (same import).
 version: v2
 modules:
   - path: proto
+  - path: rust/examples/protobuf/proto
 deps:
   - buf.build/protocolbuffers/wellknowntypes:v36.1
 lint:
@@ -11,6 +13,8 @@ lint:
   except:
     # Public option package is `markdown`, not `markdown.v1`.
     - PACKAGE_VERSION_SUFFIX
+    # example/page.proto would match package `example`; the file is page.proto.
+    - PACKAGE_DIRECTORY_MATCH
 breaking:
   use:
     - FILE

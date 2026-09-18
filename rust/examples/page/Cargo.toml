@@ -1,0 +1,16 @@
+[package]
+name = "example-page"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "Hand-written Page struct serialized as a Markdown document"
+
+[dependencies]
+serde = { workspace = true }
+serde_markdown = { workspace = true }
+
+[lints]
+workspace = true

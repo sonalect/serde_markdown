@@ -5,17 +5,17 @@ Version 0.1, 17 September 2026.
 Work order so the crate `serde_markdown` implements [DESIGN.md](DESIGN.md).
 The mapping is already locked: optional first fields block (fenced or
 bare YAML/JSON/TOML), then body sections split on top-level `---`,
-body fields marked explicitly. M0–M14 are done. There is no remaining M
-stage.
+body fields marked explicitly. M0–M14 are done. M15 ships the two
+runnable example crates.
 
 This is not a 1.0 release plan. v1 is 0.x. Compatible additions bump
 the patch; breaking API changes bump the minor ([CHANGELOG.md](CHANGELOG.md)).
 
 The first implementation is the crate `serde_markdown` (plus
 `serde_markdown_derive` and generated buffa types). Other language
-bindings are out of the M stages. Consumers of the crate are not a
-stage here. DESIGN.md §12 stays closed. Do not reopen those rows as
-new stages; M boxes implement them.
+bindings are out of the M stages. M15 is the two in-tree example
+crates; other consumers are not a stage. DESIGN.md §12 stays closed.
+Do not reopen those rows as new stages; M boxes implement them.
 
 ---
 
@@ -23,7 +23,7 @@ new stages; M boxes implement them.
 
 **Stop after every stage.** The owner reviews that stage's result before
 the next stage starts. Spec stages (M0): the review artefact is the
-document diff. Implementation stages (M1–M14): the review artefact is the
+document diff. Implementation stages (M1–M15): the review artefact is the
 code + test diff, and `bazel test //...` is green. Do not start the next M
 stage from a verbal claim that the previous one is ready.
 
@@ -37,7 +37,7 @@ claim.
 | `[x]` | Spec: owner accepted the diff. Code: the check lives in the crate tests |
 
 Each stage has **Status:** `not started` | `in progress` | `done`. Set
-`done` only when every box in that stage is `[x]`. For M1–M14, Clippy is
+`done` only when every box in that stage is `[x]`. For M1–M15, Clippy is
 clean and `bazel test //...` has exited 0 on that tree.
 
 If DESIGN.md has not yet decided a path, a field option, a fence
@@ -45,7 +45,7 @@ language, or an error kind, stop. Amend DESIGN.md; do not invent a
 silent default in `src/`. Do not implement M2 against this charter
 alone.
 
-Order: M0 → M1 → … → M14. Do not interleave a later M stage with an
+Order: M0 → M1 → … → M15. Do not interleave a later M stage with an
 earlier one. M4 may add the derive crate during M3 only if ser/de does
 not use it yet; wiring is M5.
 
@@ -70,12 +70,13 @@ not use it yet; wiring is M5.
 | [M12](#m12-io-and-features) | done | `to_vec` / `from_slice` / writer; feature matrix |
 | [M13](#m13-documents-once) | done | DESIGN, README, CHANGELOG, this dashboard |
 | [M14](#m14-acceptance) | done | Golden round-trips; `bazel test //...` |
+| [M15](#m15-runnable-examples) | in progress | `rust/examples` binaries a caller can run |
 
 ---
 
 ## 3. Locked decisions
 
-M2–M14 implement these. They live in DESIGN.md §12. Do not reopen them
+M2–M15 implement these. They live in DESIGN.md §12. Do not reopen them
 in a later M stage without amending DESIGN.md §12 and this section
 first.
 
@@ -108,101 +109,17 @@ Open questions in DESIGN.md: none.
 
 ## Examples
 
-Target usage after M14. Both produce the same document (DESIGN.md §2.1).
-These are not extra M stages.
-
-### Rust struct
-
-```rust
-use serde::{Deserialize, Serialize};
-use serde_markdown::{from_str, to_string, Markdown};
-
-#[derive(Debug, PartialEq, Serialize, Deserialize, Markdown)]
-struct Page {
-    field1: String,
-    field2: String,
-    field3: i32,
-    #[markdown(body)]
-    text1: String,
-    #[markdown(body)]
-    text2: String,
-}
-
-let page = Page {
-    field1: "foo".into(),
-    field2: "bar".into(),
-    field3: 1,
-    text1: "Text1 bla bla bla".into(),
-    text2: "Text2 bal bla bla".into(),
-};
-let md = to_string(&page)?;
-let back: Page = from_str(&md)?;
-assert_eq!(page, back);
-```
-
-````markdown
-```yaml
-field1: foo
-field2: bar
-field3: 1
-```
-Text1 bla bla bla
----
-Text2 bal bla bla
-````
-
-`#[derive(Markdown)]` is M4. `to_string` / `from_str` are M5.
-
-### Protobuf
-
-```protobuf
-syntax = "proto3";
-package example;
-
-import "markdown/options.proto";
-
-message Page {
-  string field1 = 1;
-  string field2 = 2;
-  int32 field3 = 3;
-  string text1 = 4 [(markdown.body) = true];
-  string text2 = 5 [(markdown.body) = true];
-}
-```
-
-```rust
-// build.rs — M11
-let fds = /* FileDescriptorSet from buf/protoc */;
-let attrs = serde_markdown::buffa::annotate_markdown_body(&fds);
-let mut config = buffa_build::Config::new()
-    .files(&["proto/page.proto"])
-    .includes(&["proto/", serde_markdown::PROTO_INCLUDE])
-    .generate_json(true);
-for (path, attr) in attrs.message_attributes() {
-    config = config.message_attribute(path, attr);
-}
-for (path, attr) in attrs.field_attributes() {
-    config = config.field_attribute(path, attr);
-}
-config.compile()?;
-
-// after generate
-use serde_markdown::{from_str, to_string};
-
-let page = example::Page { /* field1, field2, field3, text1, text2 */ };
-let md = to_string(&page)?;
-let back: example::Page = from_str(&md)?;
-```
-
-Same Markdown as the Rust example. `BODY_FIELDS` is `["text1", "text2"]`
-(proto3 JSON names; one-word identifiers stay unchanged). Owned generated
-messages only; views are out of M0–M14.
+Runnable crates are [`rust/examples/page`](rust/examples/page) (hand-written
+struct) and [`rust/examples/protobuf`](rust/examples/protobuf) (protobuf
+`Page`, generated with Buf + buffa like `proto/markdown`). Both print the
+same fenced YAML document. How to run them is in [README.md](README.md).
+M15 ships those crates.
 
 ---
 
-## 4. Out of M0–M14
+## 4. Out of M0–M15
 
-These must not block a stage in §2. Writes in M2–M14 must not depend on
+These must not block a stage in §2. Writes in M2–M15 must not depend on
 them.
 
 - Pandoc / Jekyll `---` YAML `---` front matter as an alternate syntax
@@ -599,7 +516,37 @@ Close only after M13.
       `//proto/markdown:lint`, `//proto/markdown:generate_test`,
       `//bazel:markdown`). Owner has reviewed the fixture tests.
 
-**Review:** acceptance. After this, `ROADMAP.md` is done for the crate.
+**Review:** acceptance. After this, start M15 (runnable examples).
+
+---
+
+## M15. Runnable examples
+
+**Status:** in progress
+
+**Codes:** DESIGN.md §2.1, §3.1–3.2.
+
+Close only after M14. Two workspace binaries a caller can run. Do not
+embed those programs in this file. Mapping is unchanged.
+
+- [x] `rust/examples/page`: hand-written `Page` with `#[markdown(body)]`
+      on `text1` / `text2`. `cargo run -p example-page` and
+      `bazel run //rust/examples/page` print DESIGN.md §2.1 (labeled
+      `yaml` fence, two body sections) and round-trip `from_str`.
+- [x] `rust/examples/protobuf`: proto3 `package example` message with
+      `(markdown.body) = true` on `text1` / `text2`. Compiled like
+      `proto/markdown`: `buf_generate` + buffa plugins into
+      `rust/examples/protobuf/generated`, `Markdown` impl in the example
+      crate (`BODY_FIELDS` is `["text1", "text2"]`). Same Markdown as the
+      struct example. `cargo run -p example-protobuf` and
+      `bazel run //rust/examples/protobuf`.
+- [x] README and DESIGN.md layout name `rust/examples/`. This file's
+      dashboard row is this stage. Tests cover both binaries
+      (round-trip and the printed document).
+- [x] `bazel test //...` green (includes `//rust:lint`). Owner has
+      reviewed.
+
+**Review:** runnable examples. Stop.
 
 ---
 
@@ -621,7 +568,8 @@ None. DESIGN.md §12 is closed. If the owner rejects a locked decision in
 
 ## 7. Consumers
 
-Out of this plan. After M14 a consumer adds `#[derive(Markdown)]` (or
-imports `options.proto` and runs `annotate_markdown_body`) and calls
-`from_str` / `to_string`. See [Examples](#examples). How any one
-consumer wires that into their tree is not an M stage.
+Out of this plan except the two crates in M15. After M14 a consumer
+adds `#[derive(Markdown)]` (or imports `options.proto` and runs
+`annotate_markdown_body`) and calls `from_str` / `to_string`. See
+[`rust/examples/`](rust/examples/). How any one consumer wires that into
+their tree beyond those examples is not an M stage.

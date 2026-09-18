@@ -570,7 +570,7 @@ pub const PROTO_INCLUDE: &str = /* CARGO_MANIFEST_DIR/../../proto */;
 
 ```text
 DESIGN.md                                 # format mapping (normative)
-ROADMAP.md                                # implementation stages M0–M14
+ROADMAP.md                                # implementation stages M0–M15
 proto/markdown/options.proto              # public (markdown.body) option
 proto/markdown/testdata/*.proto           # fixture messages (buffa generate)
 rust/generated/                           # bazel run //proto/markdown:generate
@@ -578,6 +578,8 @@ rust/serde_markdown/                      # format crate
 rust/serde_markdown/testdata/markdown/    # golden documents
 rust/serde_markdown/src/testdata/         # hand-written structs + values
 rust/serde_markdown_derive/               # #[derive(Markdown)]
+rust/examples/                            # runnable page + protobuf binaries
+rust/examples/protobuf/proto/             # example Page; bazel run //rust/examples/protobuf:generate
 ```
 
 ```toml
@@ -677,7 +679,8 @@ Same shape as [scheda](https://github.com/amsokol/scheda): bzlmod, `bazel_utils_
 | `MODULE.bazel` | `serde_markdown` module, `protobuf` 36.1.bcr.1, `rules_rust`, `bazel_utils_{bazel,buf,core,md,rust}` |
 | `buf.MODULE.bazel` | Buf CLI `v1.73.0` |
 | `rust.MODULE.bazel` | Rust 1.98.1 / edition 2024, crate_universe, `protoc-gen-buffa-packaging` |
-| `buf.yaml` | module `proto/`, dep `buf.build/protocolbuffers/wellknowntypes` |
+| `buf.yaml` | modules `proto/` and `rust/examples/protobuf/proto` (Buf LSP); dep `buf.build/protocolbuffers/wellknowntypes` |
+| `buf.markdown.yaml` | module `proto/` only — `//proto/markdown:generate` |
 | `buf.gen.rust.yaml` | remote `buf.build/anthropics/buffa` (`json=true`) + local packaging plugin |
 | `proto/markdown/BUILD.bazel` | `buf_module`, lint, format, generate → `rust/generated/markdown` |
 

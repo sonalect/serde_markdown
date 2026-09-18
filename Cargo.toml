@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = [
+    "rust/examples/page",
+    "rust/examples/protobuf",
     "rust/generated",
     "rust/serde_markdown",
     "rust/serde_markdown_derive",
