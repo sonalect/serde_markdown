@@ -37,8 +37,8 @@ cargo_build_script(
     tools = [":protoc_prefix"],
     deps = [
         "//rust/serde_markdown",
-        "@cargo//:buffa",
-        "@cargo//:buffa-build",
+        "@serde_markdown_cargo//:buffa",
+        "@serde_markdown_cargo//:buffa-build",
     ],
 )
 
@@ -57,10 +57,10 @@ rust_library(
     deps = [
         ":build_script",
         "//rust/serde_markdown",
-        "@cargo//:buffa",
-        "@cargo//:buffa-types",
-        "@cargo//:serde",
-        "@cargo//:serde_json",
+        "@serde_markdown_cargo//:buffa",
+        "@serde_markdown_cargo//:buffa-types",
+        "@serde_markdown_cargo//:serde",
+        "@serde_markdown_cargo//:serde_json",
     ],
 )
 

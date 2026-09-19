@@ -22,14 +22,14 @@ rust_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        "@cargo//:buffa",
-        "@cargo//:buffa-descriptor",
-        "@cargo//:buffa-types",
-        "@cargo//:pulldown-cmark",
-        "@cargo//:serde",
-        "@cargo//:serde_json",
-        "@cargo//:toml",
-        "@cargo//:yaml_serde",
+        "@serde_markdown_cargo//:buffa",
+        "@serde_markdown_cargo//:buffa-descriptor",
+        "@serde_markdown_cargo//:buffa-types",
+        "@serde_markdown_cargo//:pulldown-cmark",
+        "@serde_markdown_cargo//:serde",
+        "@serde_markdown_cargo//:serde_json",
+        "@serde_markdown_cargo//:toml",
+        "@serde_markdown_cargo//:yaml_serde",
     ],
 )
 
@@ -53,10 +53,10 @@ rust_test(
     visibility = ["//rust:__pkg__"],
     deps = [
         "//rust/generated",
-        "@cargo//:buffa",
-        "@cargo//:buffa-descriptor",
-        "@cargo//:buffa-types",
-        "@cargo//:serde_json",
+        "@serde_markdown_cargo//:buffa",
+        "@serde_markdown_cargo//:buffa-descriptor",
+        "@serde_markdown_cargo//:buffa-types",
+        "@serde_markdown_cargo//:serde_json",
     ],
 )
 
@@ -91,10 +91,10 @@ rust_library(
     ],
     visibility = ["//rust:__pkg__"],
     deps = [
-        "@cargo//:pulldown-cmark",
-        "@cargo//:serde",
-        "@cargo//:serde_json",
-        "@cargo//:yaml_serde",
+        "@serde_markdown_cargo//:pulldown-cmark",
+        "@serde_markdown_cargo//:serde",
+        "@serde_markdown_cargo//:serde_json",
+        "@serde_markdown_cargo//:yaml_serde",
     ],
 )
 
@@ -116,9 +116,9 @@ rust_test(
     visibility = ["//rust:__pkg__"],
     deps = [
         "//rust/generated",
-        "@cargo//:buffa",
-        "@cargo//:buffa-types",
-        "@cargo//:serde_json",
+        "@serde_markdown_cargo//:buffa",
+        "@serde_markdown_cargo//:buffa-types",
+        "@serde_markdown_cargo//:serde_json",
     ],
 )
 
@@ -141,10 +141,10 @@ rust_library(
     ],
     visibility = ["//rust:__pkg__"],
     deps = [
-        "@cargo//:pulldown-cmark",
-        "@cargo//:serde",
-        "@cargo//:serde_json",
-        "@cargo//:toml",
+        "@serde_markdown_cargo//:pulldown-cmark",
+        "@serde_markdown_cargo//:serde",
+        "@serde_markdown_cargo//:serde_json",
+        "@serde_markdown_cargo//:toml",
     ],
 )
 
@@ -166,9 +166,9 @@ rust_test(
     visibility = ["//rust:__pkg__"],
     deps = [
         "//rust/generated",
-        "@cargo//:buffa",
-        "@cargo//:buffa-types",
-        "@cargo//:serde_json",
+        "@serde_markdown_cargo//:buffa",
+        "@serde_markdown_cargo//:buffa-types",
+        "@serde_markdown_cargo//:serde_json",
     ],
 )
 
@@ -191,11 +191,11 @@ rust_library(
     ],
     visibility = ["//rust:__pkg__"],
     deps = [
-        "@cargo//:pulldown-cmark",
-        "@cargo//:serde",
-        "@cargo//:serde_json",
-        "@cargo//:toml",
-        "@cargo//:yaml_serde",
+        "@serde_markdown_cargo//:pulldown-cmark",
+        "@serde_markdown_cargo//:serde",
+        "@serde_markdown_cargo//:serde_json",
+        "@serde_markdown_cargo//:toml",
+        "@serde_markdown_cargo//:yaml_serde",
     ],
 )
 
@@ -217,8 +217,8 @@ rust_test(
     visibility = ["//rust:__pkg__"],
     deps = [
         "//rust/generated",
-        "@cargo//:buffa",
-        "@cargo//:buffa-types",
-        "@cargo//:serde_json",
+        "@serde_markdown_cargo//:buffa",
+        "@serde_markdown_cargo//:buffa-types",
+        "@serde_markdown_cargo//:serde_json",
     ],
 )

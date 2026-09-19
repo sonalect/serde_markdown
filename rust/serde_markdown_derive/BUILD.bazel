@@ -8,8 +8,8 @@ rust_proc_macro(
     crate_name = "serde_markdown_derive",
     visibility = ["//visibility:public"],
     deps = [
-        "@cargo//:proc-macro2",
-        "@cargo//:quote",
-        "@cargo//:syn",
+        "@serde_markdown_cargo//:proc-macro2",
+        "@serde_markdown_cargo//:quote",
+        "@serde_markdown_cargo//:syn",
     ],
 )

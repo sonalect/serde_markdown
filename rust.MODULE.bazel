@@ -18,10 +18,11 @@ cargo = use_extension(
     "crate",
 )
 cargo.from_cargo(
-    name = "cargo",
+    name = "serde_markdown_cargo",
     cargo_lockfile = "//:Cargo.lock",
+    lockfile = "//:cargo-bazel-lock.json",
     manifests = [
         "//:Cargo.toml",
     ],
 )
-use_repo(cargo, "cargo")
+use_repo(cargo, "serde_markdown_cargo")

@@ -12,7 +12,7 @@ rust_library(
     visibility = ["//visibility:public"],
     deps = [
         "//rust/serde_markdown",
-        "@cargo//:serde",
+        "@serde_markdown_cargo//:serde",
     ],
 )
 

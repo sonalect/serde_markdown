@@ -8,6 +8,14 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+### Changed
+
+- Bazel crate universe hub is `serde_markdown_cargo`, so another module
+  that names its hub `cargo` can depend on this repo as a `bazel_dep`.
+  Transitive `bazel_dep` uses a crate_universe `lockfile`.
+- `bazel_utils_*` modules `v0.2.9`.
+- `serde_markdown_derive` uses `syn` 3.0.6.
+
 ## [0.1.0] - 2026-09-18
 
 ### Added

@@ -15,10 +15,10 @@ rust_library(
     crate_name = "serde_markdown_generated",
     visibility = ["//visibility:public"],
     deps = [
-        "@cargo//:buffa",
-        "@cargo//:buffa-types",
-        "@cargo//:serde",
-        "@cargo//:serde_json",
+        "@serde_markdown_cargo//:buffa",
+        "@serde_markdown_cargo//:buffa-types",
+        "@serde_markdown_cargo//:serde",
+        "@serde_markdown_cargo//:serde_json",
     ],
 )
 
