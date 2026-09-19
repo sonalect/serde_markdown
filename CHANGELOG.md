@@ -8,6 +8,8 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-09-19
+
 ### Changed
 
 - Bazel crate universe hub is `serde_markdown_cargo`, so another module
@@ -154,7 +156,9 @@ API changes bump the minor.
 ## Links
 
 - [Unreleased]
+- [0.1.1]
 - [0.1.0]
 
-[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/sonalect/serde_markdown/releases/tag/v0.1.1
 [0.1.0]: https://github.com/sonalect/serde_markdown/releases/tag/v0.1.0
