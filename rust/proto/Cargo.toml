@@ -1,5 +1,5 @@
 [package]
-name = "serde-markdown-generated"
+name = "serde_markdown-proto"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

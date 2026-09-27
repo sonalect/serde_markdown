@@ -1138,11 +1138,11 @@ mod tests {
     #[test]
     fn well_known_generated_round_trip() {
         let value = values::well_known_generated();
-        let from_golden: serde_markdown_generated::markdown::testdata::WellKnown =
+        let from_golden: serde_markdown_proto::markdown::testdata::WellKnown =
             crate::from_str(goldens::WELL_KNOWN_FENCED_YAML).expect("golden");
         assert_eq!(value, from_golden);
         let md = to_string(&value).expect("serialize");
-        let back: serde_markdown_generated::markdown::testdata::WellKnown =
+        let back: serde_markdown_proto::markdown::testdata::WellKnown =
             crate::from_str(&md).expect("round-trip");
         assert_eq!(value, back);
     }
@@ -1165,11 +1165,11 @@ mod tests {
     #[test]
     fn page_published_generated_round_trip() {
         let value = values::page_generated_with_published();
-        let from_golden: serde_markdown_generated::markdown::testdata::Page =
+        let from_golden: serde_markdown_proto::markdown::testdata::Page =
             crate::from_str(goldens::PAGE_PUBLISHED_YAML).expect("golden");
         assert_eq!(value, from_golden);
         let md = to_string(&value).expect("serialize");
-        let back: serde_markdown_generated::markdown::testdata::Page =
+        let back: serde_markdown_proto::markdown::testdata::Page =
             crate::from_str(&md).expect("round-trip");
         assert_eq!(value, back);
     }
@@ -1178,11 +1178,11 @@ mod tests {
     #[test]
     fn page_generated_round_trip() {
         let value = values::page_generated();
-        let from_golden: serde_markdown_generated::markdown::testdata::Page =
+        let from_golden: serde_markdown_proto::markdown::testdata::Page =
             crate::from_str(goldens::PAGE_FENCED_YAML).expect("golden");
         assert_eq!(value, from_golden);
         let md = to_string(&value).expect("serialize");
-        let back: serde_markdown_generated::markdown::testdata::Page =
+        let back: serde_markdown_proto::markdown::testdata::Page =
             crate::from_str(&md).expect("round-trip");
         assert_eq!(value, back);
     }
@@ -1191,11 +1191,11 @@ mod tests {
     #[test]
     fn proto3_page_generated_round_trip() {
         let value = values::proto3_page_generated();
-        let from_golden: serde_markdown_generated::markdown::testdata::Proto3Page =
+        let from_golden: serde_markdown_proto::markdown::testdata::Proto3Page =
             crate::from_str(goldens::PROTO3_FENCED_YAML).expect("golden");
         assert_eq!(value, from_golden);
         let md = to_string(&value).expect("serialize");
-        let back: serde_markdown_generated::markdown::testdata::Proto3Page =
+        let back: serde_markdown_proto::markdown::testdata::Proto3Page =
             crate::from_str(&md).expect("round-trip");
         assert_eq!(value, back);
     }
@@ -1204,11 +1204,11 @@ mod tests {
     #[test]
     fn json_names_generated_round_trip() {
         let value = values::json_names_generated();
-        let from_golden: serde_markdown_generated::markdown::testdata::JsonNames =
+        let from_golden: serde_markdown_proto::markdown::testdata::JsonNames =
             crate::from_str(goldens::NAMES_FENCED_YAML).expect("golden");
         assert_eq!(value, from_golden);
         let md = to_string(&value).expect("serialize");
-        let back: serde_markdown_generated::markdown::testdata::JsonNames =
+        let back: serde_markdown_proto::markdown::testdata::JsonNames =
             crate::from_str(&md).expect("round-trip");
         assert_eq!(value, back);
     }
@@ -1217,15 +1217,15 @@ mod tests {
     #[test]
     fn optional_body_generated_round_trip() {
         let value = values::optional_middle_none_generated();
-        let from_golden: serde_markdown_generated::markdown::testdata::OptionalBody =
+        let from_golden: serde_markdown_proto::markdown::testdata::OptionalBody =
             crate::from_str(goldens::OPTIONAL_MIDDLE_NONE).expect("golden");
         assert_eq!(value, from_golden);
         let md = to_string(&value).expect("serialize");
-        let back: serde_markdown_generated::markdown::testdata::OptionalBody =
+        let back: serde_markdown_proto::markdown::testdata::OptionalBody =
             crate::from_str(&md).expect("round-trip");
         assert_eq!(value, back);
         let trailing = values::optional_trailing_none_generated();
-        let from_trailing: serde_markdown_generated::markdown::testdata::OptionalBody =
+        let from_trailing: serde_markdown_proto::markdown::testdata::OptionalBody =
             crate::from_str(goldens::OPTIONAL_TRAILING_NONE).expect("trailing");
         assert_eq!(trailing, from_trailing);
     }
@@ -1234,11 +1234,11 @@ mod tests {
     #[test]
     fn article_generated_round_trip() {
         let value = values::article_generated();
-        let from_golden: serde_markdown_generated::markdown::testdata::Article =
+        let from_golden: serde_markdown_proto::markdown::testdata::Article =
             crate::from_str(goldens::STRUCTURED_FENCED_YAML).expect("golden");
         assert_eq!(value, from_golden);
         let md = to_string(&value).expect("serialize");
-        let back: serde_markdown_generated::markdown::testdata::Article =
+        let back: serde_markdown_proto::markdown::testdata::Article =
             crate::from_str(&md).expect("round-trip");
         assert_eq!(value, back);
     }

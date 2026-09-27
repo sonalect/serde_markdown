@@ -18,7 +18,7 @@ rust_library(
     ],
     crate_name = "serde_markdown",
     proc_macro_deps = [
-        "//rust/serde_markdown_derive",
+        "//rust/markdown_derive:serde_markdown_derive",
     ],
     visibility = ["//visibility:public"],
     deps = [
@@ -48,11 +48,11 @@ rust_test(
         "yaml",
     ],
     proc_macro_deps = [
-        "//rust/serde_markdown_derive",
+        "//rust/markdown_derive:serde_markdown_derive",
     ],
     visibility = ["//rust:__pkg__"],
     deps = [
-        "//rust/generated",
+        "//rust/proto",
         "@serde_markdown_cargo//:buffa",
         "@serde_markdown_cargo//:buffa-descriptor",
         "@serde_markdown_cargo//:buffa-types",
@@ -87,7 +87,7 @@ rust_library(
     ],
     crate_name = "serde_markdown",
     proc_macro_deps = [
-        "//rust/serde_markdown_derive",
+        "//rust/markdown_derive:serde_markdown_derive",
     ],
     visibility = ["//rust:__pkg__"],
     deps = [
@@ -111,11 +111,11 @@ rust_test(
         "yaml",
     ],
     proc_macro_deps = [
-        "//rust/serde_markdown_derive",
+        "//rust/markdown_derive:serde_markdown_derive",
     ],
     visibility = ["//rust:__pkg__"],
     deps = [
-        "//rust/generated",
+        "//rust/proto",
         "@serde_markdown_cargo//:buffa",
         "@serde_markdown_cargo//:buffa-types",
         "@serde_markdown_cargo//:serde_json",
@@ -137,7 +137,7 @@ rust_library(
     ],
     crate_name = "serde_markdown",
     proc_macro_deps = [
-        "//rust/serde_markdown_derive",
+        "//rust/markdown_derive:serde_markdown_derive",
     ],
     visibility = ["//rust:__pkg__"],
     deps = [
@@ -161,11 +161,11 @@ rust_test(
         "toml",
     ],
     proc_macro_deps = [
-        "//rust/serde_markdown_derive",
+        "//rust/markdown_derive:serde_markdown_derive",
     ],
     visibility = ["//rust:__pkg__"],
     deps = [
-        "//rust/generated",
+        "//rust/proto",
         "@serde_markdown_cargo//:buffa",
         "@serde_markdown_cargo//:buffa-types",
         "@serde_markdown_cargo//:serde_json",
@@ -187,7 +187,7 @@ rust_library(
     ],
     crate_name = "serde_markdown",
     proc_macro_deps = [
-        "//rust/serde_markdown_derive",
+        "//rust/markdown_derive:serde_markdown_derive",
     ],
     visibility = ["//rust:__pkg__"],
     deps = [
@@ -212,11 +212,11 @@ rust_test(
         "yaml",
     ],
     proc_macro_deps = [
-        "//rust/serde_markdown_derive",
+        "//rust/markdown_derive:serde_markdown_derive",
     ],
     visibility = ["//rust:__pkg__"],
     deps = [
-        "//rust/generated",
+        "//rust/proto",
         "@serde_markdown_cargo//:buffa",
         "@serde_markdown_cargo//:buffa-types",
         "@serde_markdown_cargo//:serde_json",

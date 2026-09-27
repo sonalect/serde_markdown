@@ -45,6 +45,6 @@ write_source_files(
     name = "generate",
     check_that_out_file_exists = False,
     files = {
-        "//rust/generated:markdown": ":rust",
+        "//rust/proto:markdown": ":rust",
     },
 )

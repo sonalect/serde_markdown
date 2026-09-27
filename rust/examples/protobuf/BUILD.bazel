@@ -36,7 +36,7 @@ cargo_build_script(
     pkg_name = "example-protobuf",
     tools = [":protoc_prefix"],
     deps = [
-        "//rust/serde_markdown",
+        "//rust/markdown:serde_markdown",
         "@serde_markdown_cargo//:buffa",
         "@serde_markdown_cargo//:buffa-build",
     ],
@@ -51,12 +51,12 @@ rust_library(
     crate_name = "example_protobuf",
     edition = "2024",
     proc_macro_deps = [
-        "//rust/serde_markdown_derive",
+        "//rust/markdown_derive:serde_markdown_derive",
     ],
     visibility = ["//visibility:public"],
     deps = [
         ":build_script",
-        "//rust/serde_markdown",
+        "//rust/markdown:serde_markdown",
         "@serde_markdown_cargo//:buffa",
         "@serde_markdown_cargo//:buffa-types",
         "@serde_markdown_cargo//:serde",
@@ -71,7 +71,7 @@ rust_binary(
     visibility = ["//visibility:public"],
     deps = [
         ":lib",
-        "//rust/serde_markdown",
+        "//rust/markdown:serde_markdown",
     ],
 )
 

@@ -97,7 +97,7 @@ mod testdata_smoke {
 
     #[test]
     fn body_field_lists_match_design() {
-        use serde_markdown_generated::markdown::testdata as generated;
+        use serde_markdown_proto::markdown::testdata as generated;
 
         assert_eq!(types::Page::BODY_FIELDS, ["text1", "appendix"]);
         assert_eq!(types::FieldsOnly::BODY_FIELDS, [] as [&str; 0]);

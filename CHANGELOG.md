@@ -8,6 +8,15 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+### Changed
+
+- Reorganized workspace structure: renamed `rust/serde_markdown` →
+  `rust/markdown`, `rust/serde_markdown_derive` → `rust/markdown_derive`, and
+  consolidated generated code into a new `rust/proto` module (replacing
+  `rust/generated`).
+- Updated all `bazel_utils_*` modules to `v0.2.10`.
+- Updated `protobuf` to `v36.2`.
+
 ## [0.1.1] - 2026-09-19
 
 ### Changed

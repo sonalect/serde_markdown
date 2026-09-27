@@ -4,9 +4,9 @@ inputs:
   - directory: proto
 plugins:
   - local: protoc-gen-buffa
-    out: rust/generated/markdown
+    out: rust/proto/markdown
     opt:
       - json=true
   - local: protoc-gen-buffa-packaging
-    out: rust/generated/markdown
+    out: rust/proto/markdown
     strategy: all

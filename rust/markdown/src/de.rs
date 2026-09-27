@@ -861,7 +861,7 @@ mod tests {
     #[cfg(feature = "yaml")]
     #[test]
     fn well_known_generated_deserializes_golden() {
-        let got: serde_markdown_generated::markdown::testdata::WellKnown =
+        let got: serde_markdown_proto::markdown::testdata::WellKnown =
             from_str(goldens::WELL_KNOWN_FENCED_YAML).expect("generated well_known");
         assert_eq!(got, values::well_known_generated());
     }
@@ -877,7 +877,7 @@ mod tests {
     #[cfg(feature = "yaml")]
     #[test]
     fn page_published_generated_deserializes_golden() {
-        let got: serde_markdown_generated::markdown::testdata::Page =
+        let got: serde_markdown_proto::markdown::testdata::Page =
             from_str(goldens::PAGE_PUBLISHED_YAML).expect("generated published");
         assert_eq!(got, values::page_generated_with_published());
         assert!(got.published.is_set());
@@ -886,7 +886,7 @@ mod tests {
     #[cfg(feature = "yaml")]
     #[test]
     fn page_generated_deserializes_golden() {
-        let got: serde_markdown_generated::markdown::testdata::Page =
+        let got: serde_markdown_proto::markdown::testdata::Page =
             from_str(goldens::PAGE_FENCED_YAML).expect("generated page");
         assert_eq!(got, values::page_generated());
     }
@@ -894,7 +894,7 @@ mod tests {
     #[cfg(feature = "yaml")]
     #[test]
     fn proto3_page_generated_deserializes_golden() {
-        let got: serde_markdown_generated::markdown::testdata::Proto3Page =
+        let got: serde_markdown_proto::markdown::testdata::Proto3Page =
             from_str(goldens::PROTO3_FENCED_YAML).expect("generated proto3");
         assert_eq!(got, values::proto3_page_generated());
         assert!(got.body.is_some());
@@ -903,7 +903,7 @@ mod tests {
     #[cfg(feature = "yaml")]
     #[test]
     fn json_names_generated_deserializes_golden() {
-        let got: serde_markdown_generated::markdown::testdata::JsonNames =
+        let got: serde_markdown_proto::markdown::testdata::JsonNames =
             from_str(goldens::NAMES_FENCED_YAML).expect("generated names");
         assert_eq!(got, values::json_names_generated());
     }
@@ -911,10 +911,10 @@ mod tests {
     #[cfg(feature = "yaml")]
     #[test]
     fn optional_body_generated_deserializes_golden() {
-        let middle: serde_markdown_generated::markdown::testdata::OptionalBody =
+        let middle: serde_markdown_proto::markdown::testdata::OptionalBody =
             from_str(goldens::OPTIONAL_MIDDLE_NONE).expect("generated middle none");
         assert_eq!(middle, values::optional_middle_none_generated());
-        let trailing: serde_markdown_generated::markdown::testdata::OptionalBody =
+        let trailing: serde_markdown_proto::markdown::testdata::OptionalBody =
             from_str(goldens::OPTIONAL_TRAILING_NONE).expect("generated trailing none");
         assert_eq!(trailing, values::optional_trailing_none_generated());
     }
@@ -922,7 +922,7 @@ mod tests {
     #[cfg(feature = "yaml")]
     #[test]
     fn article_generated_deserializes_golden() {
-        let got: serde_markdown_generated::markdown::testdata::Article =
+        let got: serde_markdown_proto::markdown::testdata::Article =
             from_str(goldens::STRUCTURED_FENCED_YAML).expect("generated article");
         assert_eq!(got, values::article_generated());
     }

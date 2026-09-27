@@ -16,7 +16,7 @@ pub mod goldens;
 pub mod types;
 pub mod values;
 
-use serde_markdown_generated::markdown::testdata as generated;
+use serde_markdown_proto::markdown::testdata as generated;
 
 use crate::Markdown;
 

@@ -7,12 +7,12 @@ exports_files([
 ])
 
 rust_library(
-    name = "generated",
+    name = "proto",
     srcs = ["lib.rs"] + glob(
         ["markdown/**/*.rs"],
         allow_empty = True,
     ),
-    crate_name = "serde_markdown_generated",
+    crate_name = "serde_markdown_proto",
     visibility = ["//visibility:public"],
     deps = [
         "@serde_markdown_cargo//:buffa",
@@ -23,7 +23,7 @@ rust_library(
 )
 
 rust_test(
-    name = "generated_test",
-    crate = ":generated",
+    name = "test",
+    crate = ":proto",
     visibility = ["//rust:__pkg__"],
 )

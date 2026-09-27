@@ -32,7 +32,7 @@ buffa-descriptor = { workspace = true, optional = true }
 buffa = { workspace = true }
 buffa-types = { workspace = true }
 buffa-descriptor = { workspace = true }
-serde-markdown-generated = { workspace = true }
+serde_markdown-proto = { workspace = true }
 
 [lints]
 workspace = true

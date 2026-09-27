@@ -410,16 +410,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde-markdown-generated"
-version = "0.1.1"
-dependencies = [
- "buffa",
- "buffa-types",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "serde_core"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -461,11 +451,21 @@ dependencies = [
  "buffa-types",
  "pulldown-cmark",
  "serde",
- "serde-markdown-generated",
  "serde_json",
+ "serde_markdown-proto",
  "serde_markdown_derive",
  "toml",
  "yaml_serde",
+]
+
+[[package]]
+name = "serde_markdown-proto"
+version = "0.1.1"
+dependencies = [
+ "buffa",
+ "buffa-types",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

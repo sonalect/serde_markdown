@@ -3,7 +3,7 @@
 use buffa_types::google::protobuf::{
     Duration, Empty, FieldMask, Int32Value, Struct, Timestamp, Value,
 };
-use serde_markdown_generated::markdown::testdata::{
+use serde_markdown_proto::markdown::testdata::{
     Article, BodyOnly, FieldsOnly, JsonNames, NestedFields, Note, OptionalBody, Page, Proto3Page,
     WellKnown, nested_fields,
 };
