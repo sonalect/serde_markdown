@@ -8,6 +8,14 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+### Changed
+
+- Updated all `bazel_utils_*` modules to `v0.2.11`.
+- Updated `bazel_utils_*` git remotes to use sonalect forks.
+- Protobuf well-known types now sourced locally via `proto/third_party` instead
+  of remote Buf dependency.
+- Updated `buf.yaml` to remove remote wellknowntypes dependency.
+
 ## [0.2.0] - 2026-09-27
 
 ### Changed

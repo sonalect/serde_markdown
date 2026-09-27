@@ -5,8 +5,6 @@ version: v2
 modules:
   - path: proto
   - path: rust/examples/protobuf/proto
-deps:
-  - buf.build/protocolbuffers/wellknowntypes:v36.2
 lint:
   use:
     - STANDARD

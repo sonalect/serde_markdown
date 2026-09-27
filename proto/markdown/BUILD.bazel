@@ -19,8 +19,10 @@ buf_module(
         ":protos",
         "//rust/examples/protobuf:protos",
     ],
-    config = "//:buf.yaml",
     visibility = ["//visibility:public"],
+    deps = [
+        "//proto/third_party:protobuf",
+    ],
 )
 
 buf_lint_test(

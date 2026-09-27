@@ -1,0 +1,10 @@
+load("@bazel_utils_buf//:buf.bzl", "buf_deps")
+
+buf_deps(
+    name = "protobuf",
+    srcs = [
+        "@protobuf//:descriptor_proto_srcs",
+    ],
+    strip_import_prefix = "/src",
+    visibility = ["//visibility:public"],
+)
