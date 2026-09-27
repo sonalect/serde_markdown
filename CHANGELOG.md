@@ -8,6 +8,8 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-09-27
+
 ### Changed
 
 - Reorganized workspace structure: renamed `rust/serde_markdown` →
@@ -165,9 +167,11 @@ API changes bump the minor.
 ## Links
 
 - [Unreleased]
+- [0.2.0]
 - [0.1.1]
 - [0.1.0]
 
-[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sonalect/serde_markdown/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/sonalect/serde_markdown/releases/tag/v0.1.1
 [0.1.0]: https://github.com/sonalect/serde_markdown/releases/tag/v0.1.0
