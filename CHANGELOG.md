@@ -12,7 +12,6 @@ API changes bump the minor.
 
 - Updated minimum supported Rust version from 1.98.1 to 1.99.0.
 - Added `rust-toolchain.toml` to pin Rust toolchain version.
-- Added `RUST_1_99_0_ANALYSIS.md` documenting compatibility and new feature analysis.
 
 ## [0.2.1] - 2026-09-27
 
