@@ -682,7 +682,7 @@ bzlmod, `bazel_utils_*`, hermetic Buf, buffa plugins, `write_source_files` back 
 | --- | --- |
 | `MODULE.bazel` | `serde_markdown` module, `protobuf` 36.1.bcr.1, `rules_rust`, `bazel_utils_{bazel,buf,core,md,protoc,rust}` |
 | `buf.MODULE.bazel` | Buf CLI `v1.73.0`; `protoc.plugin` pins `protoc-gen-buffa` and `protoc-gen-buffa-packaging` `v0.9.2` |
-| `rust.MODULE.bazel` | Rust 1.98.1 / edition 2024, crate_universe (workspace crates only) |
+| `rust.MODULE.bazel` | Rust 1.99.0 / edition 2024, crate_universe (workspace crates only) |
 | `buf.yaml` | modules `proto/` and `rust/examples/protobuf/proto` (LSP, lint, format); dep `buf.build/protocolbuffers/wellknowntypes` |
 | `buf.gen.rust.yaml` | local `protoc-gen-buffa` (`json=true`) + local `protoc-gen-buffa-packaging`; `inputs` is `proto/` only |
 | `proto/markdown/BUILD.bazel` | `buf_module`, lint, format, generate → `rust/generated/markdown` (`protoc.plugin` tags on PATH) |

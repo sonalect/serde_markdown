@@ -1,5 +1,5 @@
 {
-  "checksum": "1d5ea4411ee8a3d4b8e5d255ae26f1ac2f5fb52fb422670498d129a26a00b5e6",
+  "checksum": "1d7462543c636ab800302fcc089634d473c819b3bc04e0ab8404e49023e20b7f",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -748,7 +748,7 @@
       ],
       "version": "0.3.14"
     },
-    "example-page 0.2.1": {
+    "example-page 0.2.2": {
       "common_attrs": {
         "deps": [
           {
@@ -774,9 +774,9 @@
           }
         }
       ],
-      "version": "0.2.1"
+      "version": "0.2.2"
     },
-    "example-protobuf 0.2.1": {
+    "example-protobuf 0.2.2": {
       "build_script_attrs": {
         "deps": [
           {
@@ -835,7 +835,7 @@
           }
         }
       ],
-      "version": "0.2.1"
+      "version": "0.2.2"
     },
     "fastrand 2.5.0": {
       "common_attrs": {
@@ -2313,7 +2313,7 @@
       ],
       "version": "1.0.151"
     },
-    "serde_markdown 0.2.1": {
+    "serde_markdown 0.2.2": {
       "common_attrs": {
         "crate_features": [
           "buffa",
@@ -2375,9 +2375,9 @@
           }
         }
       ],
-      "version": "0.2.1"
+      "version": "0.2.2"
     },
-    "serde_markdown-proto 0.2.1": {
+    "serde_markdown-proto 0.2.2": {
       "common_attrs": {
         "deps": [
           {
@@ -2415,9 +2415,9 @@
           }
         }
       ],
-      "version": "0.2.1"
+      "version": "0.2.2"
     },
-    "serde_markdown_derive 0.2.1": {
+    "serde_markdown_derive 0.2.2": {
       "common_attrs": {
         "deps": [
           {
@@ -2451,7 +2451,7 @@
           }
         }
       ],
-      "version": "0.2.1"
+      "version": "0.2.2"
     },
     "serde_spanned 1.1.1": {
       "common_attrs": {
@@ -3314,10 +3314,10 @@
   ],
   "direct_dev_deps": [],
   "workspace_members": {
-    "example-page 0.2.1": "rust/examples/page",
-    "example-protobuf 0.2.1": "rust/examples/protobuf",
-    "serde_markdown 0.2.1": "rust/markdown",
-    "serde_markdown-proto 0.2.1": "rust/proto",
-    "serde_markdown_derive 0.2.1": "rust/markdown_derive"
+    "example-page 0.2.2": "rust/examples/page",
+    "example-protobuf 0.2.2": "rust/examples/protobuf",
+    "serde_markdown 0.2.2": "rust/markdown",
+    "serde_markdown-proto 0.2.2": "rust/proto",
+    "serde_markdown_derive 0.2.2": "rust/markdown_derive"
   }
 }

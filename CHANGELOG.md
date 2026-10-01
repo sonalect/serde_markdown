@@ -8,10 +8,13 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+## [0.2.2] - 2026-10-01
+
 ### Changed
 
-- Updated minimum supported Rust version from 1.98.1 to 1.99.0.
-- Added `rust-toolchain.toml` to pin Rust toolchain version.
+- Updated Rust toolchain and minimum supported Rust version from 1.98.1 to
+  1.99.0 (Cargo `rust-version` and Bazel `RUST_VERSION`).
+- Added `rust-toolchain.toml` to pin the Rust toolchain for Cargo builds.
 
 ## [0.2.1] - 2026-09-27
 
@@ -182,12 +185,14 @@ API changes bump the minor.
 ## Links
 
 - [Unreleased]
+- [0.2.2]
 - [0.2.1]
 - [0.2.0]
 - [0.1.1]
 - [0.1.0]
 
-[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/sonalect/serde_markdown/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/sonalect/serde_markdown/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/sonalect/serde_markdown/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/sonalect/serde_markdown/releases/tag/v0.1.1
