@@ -8,6 +8,8 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-10-02
+
 ### Fixed
 
 - A fenced code block inside a list item or a block quote was reported as an
@@ -195,13 +197,15 @@ API changes bump the minor.
 ## Links
 
 - [Unreleased]
+- [0.2.3]
 - [0.2.2]
 - [0.2.1]
 - [0.2.0]
 - [0.1.1]
 - [0.1.0]
 
-[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/sonalect/serde_markdown/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/sonalect/serde_markdown/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/sonalect/serde_markdown/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/sonalect/serde_markdown/compare/v0.1.1...v0.2.0
