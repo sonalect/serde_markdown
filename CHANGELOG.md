@@ -8,6 +8,16 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+### Fixed
+
+- A fenced code block inside a list item or a block quote was reported as an
+  unclosed fence (`Syntax`) although its closing line was there: the check
+  allowed at most three spaces before the closer on the raw line, and no `>`
+  marker. The closer is now judged against the opener's column, after the
+  container prefix. Bare YAML fields whose first key is a list read the rest
+  of the mapping as that list item, so a multi-line string holding a fenced
+  block was written by `FieldsLayout::Bare` and then refused on read.
+
 ## [0.2.2] - 2026-10-01
 
 ### Changed

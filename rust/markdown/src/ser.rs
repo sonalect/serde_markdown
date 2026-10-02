@@ -902,6 +902,43 @@ mod tests {
         assert_eq!(values::page(), back);
     }
 
+    /// Bare YAML whose first field is a list and whose later field holds a
+    /// multi-line string with a fenced block: the shape a Knowqore Lesson has.
+    /// CommonMark reads the fields as one list item, so the fence sits inside
+    /// that item, indented past three spaces on the raw line.
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn bare_yaml_with_a_fenced_string_after_a_list_reads_back() {
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+        struct Artifact {
+            path: String,
+        }
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+        struct Reason {
+            text: String,
+        }
+        #[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize, crate::Markdown)]
+        struct Note {
+            artifacts: Vec<Artifact>,
+            reason: Reason,
+            #[markdown(body)]
+            claim: String,
+        }
+        let note = Note {
+            artifacts: vec![Artifact {
+                path: "rules/code-first.md".into(),
+            }],
+            reason: Reason {
+                text: "Behaviour ships first.\n\n```text\n# BAD\n# GOOD\n```".into(),
+            },
+            claim: "Keep one pass.".into(),
+        };
+        let md = to_string_with(&note, Format::Yaml, FieldsLayout::Bare).expect("serialize");
+        assert!(md.contains("```text"), "{md}");
+        let back: Note = crate::from_str(&md).expect("deserialize");
+        assert_eq!(note, back);
+    }
+
     #[cfg(feature = "json")]
     #[test]
     fn serialize_bare_json_separator_before_body() {

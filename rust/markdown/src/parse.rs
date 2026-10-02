@@ -91,7 +91,8 @@ fn unclosed_fence_offset(input: &str, events: &[(Event<'_>, Range<usize>)]) -> O
             .unwrap_or(input.len())
             .max(range.end)
             .min(input.len());
-        if !fenced_block_has_closer(&input[range.start..end]) {
+        let line_start = input[..range.start].rfind('\n').map_or(0, |nl| nl + 1);
+        if !fenced_block_has_closer(&input[line_start..end], range.start - line_start) {
             return Some(range.start);
         }
     }
@@ -100,13 +101,26 @@ fn unclosed_fence_offset(input: &str, events: &[(Event<'_>, Range<usize>)]) -> O
 
 /// Opening fence plus a last line that is a CommonMark closing fence of the
 /// same character and at least the same length.
-fn fenced_block_has_closer(src: &str) -> bool {
+///
+/// `src` starts at the beginning of the opener's raw line; `block_col` is
+/// where the block starts on that line. Inside a list item or a block quote
+/// the raw line carries the container's indentation or `>` markers, so the
+/// closer is judged by its column against the opener's column (at most three
+/// more), after a prefix of spaces and `>` markers, not by a fixed three
+/// spaces from the line start. At top level this is the CommonMark rule for
+/// an opener at column 0; for an indented opener it accepts a few columns
+/// more than CommonMark would.
+fn fenced_block_has_closer(src: &str, block_col: usize) -> bool {
     let trimmed = src.trim_end_matches(['\n', '\r']);
     let Some(first_nl) = trimmed.find('\n') else {
         return false;
     };
-    let opener = &trimmed[..first_nl];
-    let Some((ch, n)) = fence_opener(opener) else {
+    let opener_line = trimmed[..first_nl].trim_end_matches('\r');
+    let Some(from_block) = opener_line.get(block_col..) else {
+        return false;
+    };
+    let open_col = block_col + (from_block.len() - from_block.trim_start_matches(' ').len());
+    let Some((ch, n)) = opener_line.get(open_col..).and_then(fence_opener) else {
         return false;
     };
     let rest = trimmed[first_nl + 1..].trim_start_matches('\r');
@@ -114,7 +128,9 @@ fn fenced_block_has_closer(src: &str) -> bool {
         Some((_, last)) => last.trim_end_matches('\r'),
         None => rest.trim_end_matches('\r'),
     };
-    is_fence_closer(last, ch, n)
+    let fence = last.trim_start_matches([' ', '>']);
+    let close_col = last.len() - fence.len();
+    close_col <= open_col + 3 && is_fence_closer(fence, ch, n)
 }
 
 fn fence_opener(line: &str) -> Option<(u8, usize)> {
@@ -733,6 +749,47 @@ mod tests {
         let err = parse(input).expect_err("unclosed body fence");
         assert_eq!(err.kind(), crate::ErrorKind::Syntax);
         assert!(err.offset().is_some());
+    }
+
+    /// Bare YAML whose first key is a list: CommonMark reads the rest of the
+    /// mapping as that list item's content, so a fence inside a nested block
+    /// scalar is indented past three spaces on the raw line and still closed.
+    const BARE_YAML_WITH_NESTED_FENCE: &str = "artifacts:\n\
+- path: a.md\n  kind: doc\n\
+claim: Keep one pass.\n\
+reason:\n  text: |-\n    Behaviour ships first.\n\n    ```text\n    # BAD\n    ```\n\
+status: candidate\n\
+---\n\
+Body text.\n";
+
+    #[test]
+    fn closed_fence_inside_a_container_is_not_unclosed() {
+        let doc = parse_ok(BARE_YAML_WITH_NESTED_FENCE);
+        let Fields::Bare { sniff, inner } = &doc.fields else {
+            panic!("expected bare fields, got {doc:?}");
+        };
+        assert_eq!(*sniff, Sniff::Yaml);
+        assert!(
+            inner.contains("    ```text\n    # BAD\n    ```\n"),
+            "{inner}"
+        );
+        assert!(inner.ends_with("status: candidate\n"), "{inner}");
+        assert_eq!(doc.body, vec!["Body text.\n".to_owned()]);
+    }
+
+    #[test]
+    fn closed_fences_in_a_list_and_a_quote_are_not_unclosed() {
+        let input =
+            "```yaml\nk: 1\n```\n- item\n\n  ```text\n  code\n  ```\n\n> ```\n> quoted\n> ```\n";
+        let doc = parse_ok(input);
+        assert_eq!(doc.body.len(), 1, "{doc:?}");
+    }
+
+    #[test]
+    fn a_fence_in_a_list_left_open_is_still_unclosed() {
+        let input = "```yaml\nk: 1\n```\n- item\n\n  ```text\n  code\n";
+        let err = parse(input).expect_err("unclosed fence in a list item");
+        assert_eq!(err.kind(), crate::ErrorKind::Syntax);
     }
 
     #[test]
