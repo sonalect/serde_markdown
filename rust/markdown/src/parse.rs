@@ -1,14 +1,21 @@
 //! CommonMark split of a Markdown document into a fields slice and body sections.
 //!
-//! This module does **not** parse YAML, JSON, or TOML. Unlabeled fences and
-//! bare first slices only get a sniff hint. An unclosed fenced code block is
-//! [`crate::ErrorKind::Syntax`] with a byte offset.
+//! This module decodes YAML, JSON, or TOML only for a bare first slice, to
+//! decide whether that slice is a mapping (fields) or the start of the body.
+//! A fenced fields block is returned as text. An unclosed fenced code block
+//! before the last body section is [`crate::ErrorKind::Syntax`] with a byte
+//! offset.
+//!
+//! The last body field is never parsed: it is every byte after its separator.
+//! Only the text before it is scanned for top-level dash `---` rules.
 
 use std::ops::Range;
 
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
+use serde_json::{Map, Value};
 
-use crate::error::Error;
+use crate::error::{Error, ErrorKind};
+use crate::format::{self, Format};
 
 /// Shape-based guess for an unlabeled fence or a bare first slice.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,8 +25,19 @@ pub(crate) enum Sniff {
     Toml,
 }
 
+impl Sniff {
+    /// The fence language this guess selects.
+    pub(crate) fn format(self) -> Format {
+        match self {
+            Self::Yaml => Format::Yaml,
+            Self::Json => Format::Json,
+            Self::Toml => Format::Toml,
+        }
+    }
+}
+
 /// How the first fields slice was found.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Fields {
     /// First top-level block after the prefix is a yaml/json/toml (or unlabeled) fence.
     Fenced {
@@ -28,62 +46,178 @@ pub(crate) enum Fields {
         sniff: Sniff,
         inner: String,
     },
-    /// No fields fence; text until the next top-level `---` (or EOF).
-    Bare { sniff: Sniff, inner: String },
+    /// No fields fence; text until the next top-level `---` (or EOF) that
+    /// decoded as a mapping.
+    Bare {
+        sniff: Sniff,
+        inner: String,
+        map: Map<String, Value>,
+    },
+    /// No fields. The body starts at the first byte of the document.
+    None,
 }
 
 /// Split result. Body sections do not include the `---` separators.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Document {
     pub fields: Fields,
     pub body: Vec<String>,
 }
 
-pub(crate) fn parse(input: &str) -> Result<Document, Error> {
+/// Split `input` for a root struct with `body_fields` body fields.
+///
+/// The first `body_fields - 1` top-level dash rules after the fields block
+/// end the earlier sections; the last section is the rest of the document,
+/// verbatim. Sections that are missing from the document are not returned.
+pub(crate) fn parse(input: &str, body_fields: usize) -> Result<Document, Error> {
     let events: Vec<(Event<'_>, Range<usize>)> = Parser::new_ext(input, parser_options())
         .into_offset_iter()
         .collect();
 
-    if let Some(offset) = unclosed_fence_offset(input, &events) {
-        return Err(Error::syntax(offset, "unclosed fence"));
-    }
-
     let dash_rules = top_level_dash_rules(input, &events);
     let content_start = skip_prefix(input, &dash_rules);
 
-    if let Some(fence) = leading_fields_fence(input, &events, content_start) {
-        let body = split_body(input, fence.body_start, &dash_rules);
-        return Ok(Document {
-            fields: Fields::Fenced {
+    let (fields, body_start, separated) = match leading_fields_fence(input, &events, content_start)
+    {
+        Some(fence) => {
+            let fields = Fields::Fenced {
                 labeled: fence.labeled,
                 sniff: fence.sniff,
                 inner: fence.inner,
-            },
-            body,
-        });
-    }
-
-    let next_rule = dash_rules
-        .iter()
-        .find(|range| range.start >= content_start)
-        .cloned();
-    let (inner, body_start) = match next_rule {
-        Some(range) => (input[content_start..range.start].to_owned(), range.end),
-        None => (input[content_start..].to_owned(), input.len()),
+            };
+            (fields, fence.body_start, false)
+        }
+        None => {
+            let next_rule = dash_rules
+                .iter()
+                .find(|range| range.start >= content_start)
+                .cloned();
+            let (inner, body_start, separated) = match next_rule {
+                Some(range) => (
+                    input[content_start..range.start].to_owned(),
+                    range.end,
+                    true,
+                ),
+                None => (input[content_start..].to_owned(), input.len(), false),
+            };
+            let sniff = sniff(&inner);
+            match load_bare_mapping(&inner, sniff)? {
+                Some(map) => (Fields::Bare { sniff, inner, map }, body_start, separated),
+                None => (Fields::None, 0, false),
+            }
+        }
     };
-    let sniff = sniff(&inner);
-    let body = split_body(input, body_start, &dash_rules);
+
+    let split = split_body(input, body_start, &dash_rules, body_fields, separated);
+    if let Some(offset) = unclosed_fence_offset(input, &events, split.verbatim_from) {
+        return Err(Error::syntax(offset, "unclosed fence"));
+    }
     Ok(Document {
-        fields: Fields::Bare { sniff, inner },
-        body,
+        fields,
+        body: split.sections,
     })
 }
 
-fn unclosed_fence_offset(input: &str, events: &[(Event<'_>, Range<usize>)]) -> Option<usize> {
+/// Bare first slice: a mapping is fields. YAML that is not a mapping (or that
+/// the YAML decoder rejects) is `None`: the slice is body. A JSON or TOML
+/// decode failure stays [`ErrorKind::FrontMatter`].
+fn load_bare_mapping(inner: &str, sniff: Sniff) -> Result<Option<Map<String, Value>>, Error> {
+    let format = sniff.format();
+    let value = match format::load(inner, format) {
+        Ok(value) => value,
+        Err(err) if err.kind() == ErrorKind::FormatDisabled => return Err(err),
+        Err(err) if matches!(format, Format::Json | Format::Toml) => return Err(err),
+        Err(_) => return Ok(None),
+    };
+    Ok(match value {
+        Value::Object(map) => Some(map),
+        Value::Null => Some(Map::new()),
+        _ => None,
+    })
+}
+
+/// Whether a reader would take the start of `candidate` for a fields block
+/// (or fail while trying to read it as one). Used by the writer to decide
+/// whether a body-only document needs an explicit empty fields block.
+pub(crate) fn would_read_fields(candidate: &str, body_fields: usize) -> Result<bool, Error> {
+    match parse(candidate, body_fields) {
+        Ok(doc) => Ok(!matches!(doc.fields, Fields::None)),
+        Err(err)
+            if matches!(
+                err.kind(),
+                ErrorKind::FrontMatter | ErrorKind::FormatDisabled
+            ) =>
+        {
+            Ok(true)
+        }
+        Err(err) => Err(err),
+    }
+}
+
+/// Canonical separator between two body sections: the line break that ends
+/// the earlier section, then `---`, then its line break.
+pub(crate) const SEPARATOR: &str = "\n---\n";
+
+/// Check that `text` can be written as a body section that is not the last
+/// one: followed by the canonical separator, a reader finds exactly that one
+/// top-level dash rule and no unclosed fence.
+pub(crate) fn check_middle_section(text: &str) -> Result<(), Error> {
+    if text.ends_with('\r') {
+        return Err(Error::body(
+            "a body value that is not the last must not end with a carriage return",
+        ));
+    }
+    let mut doc = String::with_capacity(text.len() + SEPARATOR.len());
+    doc.push_str(text);
+    doc.push_str(SEPARATOR);
+    let events: Vec<(Event<'_>, Range<usize>)> = Parser::new_ext(&doc, parser_options())
+        .into_offset_iter()
+        .collect();
+    let rules = top_level_dash_rules(&doc, &events);
+    let closed = unclosed_fence_offset(&doc, &events, doc.len()).is_none();
+    let expected = text.len() + 1;
+    match rules.as_slice() {
+        [rule] if closed && rule.start == expected => Ok(()),
+        _ => Err(Error::body(
+            "a body value that is not the last contains a top-level `---` line \
+             (or an unclosed code fence) and would split on read; \
+             put it in the last body field",
+        )),
+    }
+}
+
+/// Whether the first line of `text` is a dash thematic break.
+pub(crate) fn starts_with_dash_rule(text: &str) -> bool {
+    first_line(text).is_some_and(|(line, _)| is_dash_thematic_break(line))
+}
+
+/// First line of `text` without its terminator, and the text after the
+/// terminator. `None` for empty text.
+fn first_line(text: &str) -> Option<(&str, &str)> {
+    if text.is_empty() {
+        return None;
+    }
+    match text.find('\n') {
+        Some(i) => Some((text[..i].trim_end_matches('\r'), &text[i + 1..])),
+        None => Some((text.trim_end_matches('\r'), "")),
+    }
+}
+
+/// Start of the first fenced block that begins before `limit` and has no
+/// closing fence. Text from `limit` on is the verbatim last section and is
+/// not checked.
+fn unclosed_fence_offset(
+    input: &str,
+    events: &[(Event<'_>, Range<usize>)],
+    limit: usize,
+) -> Option<usize> {
     for (i, (event, range)) in events.iter().enumerate() {
         let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(_))) = event else {
             continue;
         };
+        if range.start >= limit {
+            break;
+        }
         let end_idx = matching_code_block_end(events, i);
         let end = events
             .get(end_idx)
@@ -434,34 +568,112 @@ fn is_toml_key(key: &str) -> bool {
         .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
 }
 
-fn split_body(input: &str, from: usize, dash_rules: &[Range<usize>]) -> Vec<String> {
+/// Sections of the body region plus where the verbatim last section starts.
+struct Split {
+    sections: Vec<String>,
+    /// Byte offset where the last section's verbatim text begins, or the end
+    /// of the document when the document has fewer separators than that.
+    verbatim_from: usize,
+}
+
+/// Split the body region that starts at `from`.
+///
+/// `separated` is true when a `---` line closed the bare fields slice just
+/// before `from`: that line is already the first separator, so a single body
+/// field takes the region as is, even when it is empty.
+fn split_body(
+    input: &str,
+    from: usize,
+    dash_rules: &[Range<usize>],
+    body_fields: usize,
+    separated: bool,
+) -> Split {
+    let rest = input.get(from..).unwrap_or("");
+    match body_fields {
+        0 => {
+            let sections = if rest.chars().all(char::is_whitespace) {
+                Vec::new()
+            } else {
+                vec![rest.to_owned()]
+            };
+            Split {
+                sections,
+                verbatim_from: from,
+            }
+        }
+        1 => {
+            // The only body field is the last one: the region, verbatim. With
+            // no `---` line before it (a fenced block, or no fields), an
+            // empty value, or one whose first line is itself a dash rule,
+            // is introduced by one `---` line that this field's reader drops.
+            let sections = if separated {
+                vec![rest.to_owned()]
+            } else if let Some((line, after)) = first_line(rest)
+                && is_dash_thematic_break(line)
+            {
+                vec![after.to_owned()]
+            } else if rest.is_empty() {
+                Vec::new()
+            } else {
+                vec![rest.to_owned()]
+            };
+            Split {
+                sections,
+                verbatim_from: from,
+            }
+        }
+        _ => split_many(input, from, dash_rules, body_fields),
+    }
+}
+
+fn split_many(input: &str, from: usize, dash_rules: &[Range<usize>], body_fields: usize) -> Split {
     if from >= input.len() {
-        return Vec::new();
+        return Split {
+            sections: Vec::new(),
+            verbatim_from: input.len(),
+        };
     }
-    let rules: Vec<&Range<usize>> = dash_rules
-        .iter()
-        .filter(|range| range.start >= from)
-        .collect();
-    if rules.is_empty() {
-        let rest = &input[from..];
-        if rest.is_empty() || rest.chars().all(char::is_whitespace) {
-            return Vec::new();
-        }
-        return vec![rest.to_owned()];
-    }
-    let mut sections = Vec::with_capacity(rules.len() + 1);
+    let mut sections = Vec::with_capacity(body_fields.min(8));
     let mut cur = from;
-    for range in rules {
-        sections.push(input[cur..range.start].to_owned());
+    let mut taken = 0;
+    for range in dash_rules.iter().filter(|range| range.start >= from) {
+        if taken == body_fields - 1 {
+            break;
+        }
+        let line_start = input[..range.start].rfind('\n').map_or(0, |nl| nl + 1);
+        let end = line_start.max(cur);
+        sections.push(drop_line_end(&input[cur..end]).to_owned());
         cur = range.end;
+        taken += 1;
     }
-    if cur < input.len() {
-        let tail = &input[cur..];
-        if !tail.is_empty() {
-            sections.push(tail.to_owned());
+    let last = &input[cur..];
+    // The last field takes the rest, even when empty, once all its
+    // separators were seen. Short of that, the tail is an ordinary section
+    // that ended at the end of the document, and nothing is a section.
+    if taken == body_fields - 1 {
+        sections.push(last.to_owned());
+        Split {
+            sections,
+            verbatim_from: cur,
+        }
+    } else {
+        if !last.is_empty() {
+            sections.push(last.to_owned());
+        }
+        Split {
+            sections,
+            verbatim_from: input.len(),
         }
     }
-    sections
+}
+
+/// Drop the one line terminator that belongs to the separator after a
+/// section. Every other byte, trailing spaces and blank lines included, stays.
+fn drop_line_end(section: &str) -> &str {
+    section
+        .strip_suffix("\r\n")
+        .or_else(|| section.strip_suffix('\n'))
+        .unwrap_or(section)
 }
 
 #[cfg(test)]
@@ -476,19 +688,24 @@ mod tests {
                 sniff,
                 inner,
             } => (labeled, *sniff, inner.as_str()),
-            Fields::Bare { .. } => panic!("expected fenced fields, got {doc:?}"),
+            Fields::Bare { .. } | Fields::None => panic!("expected fenced fields, got {doc:?}"),
         }
     }
 
     fn bare(doc: &Document) -> (Sniff, &str) {
         match &doc.fields {
-            Fields::Bare { sniff, inner } => (*sniff, inner.as_str()),
-            Fields::Fenced { .. } => panic!("expected bare fields, got {doc:?}"),
+            Fields::Bare { sniff, inner, .. } => (*sniff, inner.as_str()),
+            Fields::Fenced { .. } | Fields::None => panic!("expected bare fields, got {doc:?}"),
         }
     }
 
+    /// Split for a root with two body fields, like the `Page` fixture.
     fn parse_ok(input: &str) -> Document {
-        parse(input).unwrap_or_else(|err| panic!("{err}"))
+        parse_n(input, 2)
+    }
+
+    fn parse_n(input: &str, body_fields: usize) -> Document {
+        parse(input, body_fields).unwrap_or_else(|err| panic!("{err}"))
     }
 
     #[test]
@@ -586,33 +803,40 @@ mod tests {
         assert_eq!(doc.body[1].trim(), "Text2 bal bla bla");
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
-    fn fence_not_first_is_bare_candidate() {
+    fn fence_not_first_is_body() {
         let doc = parse_ok(goldens::PAGE_FENCE_NOT_FIRST);
-        let (sniff, inner) = bare(&doc);
-        assert_eq!(sniff, Sniff::Yaml);
-        assert!(inner.contains("Intro paragraph"));
-        assert!(inner.contains("```yaml"));
-        assert!(doc.body.is_empty());
+        assert_eq!(doc.fields, Fields::None);
+        assert_eq!(doc.body.len(), 1);
+        assert!(doc.body[0].starts_with("Intro paragraph"));
+        assert!(doc.body[0].contains("```yaml"));
     }
 
     #[test]
     fn bare_slices_sniff() {
-        let yaml = parse_ok(goldens::PAGE_BARE_YAML);
-        let (sniff, inner) = bare(&yaml);
-        assert_eq!(sniff, Sniff::Yaml);
-        assert!(inner.contains("field1: foo"));
-        assert_eq!(yaml.body.len(), 2);
-
-        let json = parse_ok(goldens::PAGE_BARE_JSON);
-        let (sniff, _) = bare(&json);
-        assert_eq!(sniff, Sniff::Json);
-        assert_eq!(json.body.len(), 2);
-
-        let toml = parse_ok(goldens::PAGE_BARE_TOML);
-        let (sniff, _) = bare(&toml);
-        assert_eq!(sniff, Sniff::Toml);
-        assert_eq!(toml.body.len(), 2);
+        #[cfg(feature = "yaml")]
+        {
+            let yaml = parse_ok(goldens::PAGE_BARE_YAML);
+            let (sniff, inner) = bare(&yaml);
+            assert_eq!(sniff, Sniff::Yaml);
+            assert!(inner.contains("field1: foo"));
+            assert_eq!(yaml.body.len(), 2);
+        }
+        #[cfg(feature = "json")]
+        {
+            let json = parse_ok(goldens::PAGE_BARE_JSON);
+            let (sniff, _) = bare(&json);
+            assert_eq!(sniff, Sniff::Json);
+            assert_eq!(json.body.len(), 2);
+        }
+        #[cfg(feature = "toml")]
+        {
+            let toml = parse_ok(goldens::PAGE_BARE_TOML);
+            let (sniff, _) = bare(&toml);
+            assert_eq!(sniff, Sniff::Toml);
+            assert_eq!(toml.body.len(), 2);
+        }
     }
 
     #[test]
@@ -652,6 +876,7 @@ mod tests {
         assert!(doc.body.is_empty());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn fields_only_bare_is_whole_file() {
         let doc = parse_ok(goldens::FIELDS_ONLY_BARE_YAML);
@@ -661,19 +886,17 @@ mod tests {
         assert!(doc.body.is_empty());
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
-    fn body_only_is_bare_candidate_then_one_section() {
+    fn body_only_is_two_sections() {
         let doc = parse_ok(goldens::BODY_ONLY_TWO_SECTIONS);
-        let (sniff, inner) = bare(&doc);
-        assert_eq!(sniff, Sniff::Yaml);
-        assert_eq!(inner.trim(), "Text1 bla bla bla");
-        assert_eq!(doc.body.len(), 1);
-        assert_eq!(doc.body[0].trim(), "Text2 bal bla bla");
+        assert_eq!(doc.fields, Fields::None);
+        assert_eq!(doc.body, ["Text1 bla bla bla", "Text2 bal bla bla"]);
     }
 
     #[test]
     fn optional_middle_none_keeps_empty_slot() {
-        let doc = parse_ok(goldens::OPTIONAL_MIDDLE_NONE);
+        let doc = parse_n(goldens::OPTIONAL_MIDDLE_NONE, 3);
         assert_eq!(doc.body.len(), 3);
         assert_eq!(doc.body[0].trim(), "a");
         assert!(doc.body[1].trim().is_empty());
@@ -682,20 +905,19 @@ mod tests {
 
     #[test]
     fn optional_leading_none_empty_first_section() {
-        let doc = parse_ok(goldens::OPTIONAL_LEADING_NONE);
+        let doc = parse_n(goldens::OPTIONAL_LEADING_NONE, 3);
         assert_eq!(doc.body.len(), 2);
         assert!(doc.body[0].trim().is_empty());
         assert_eq!(doc.body[1].trim(), "a");
     }
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn rust_info_string_is_not_fields_fence() {
         let input = "```rust\nlet x = 1;\n```\n";
         let doc = parse_ok(input);
-        let (sniff, inner) = bare(&doc);
-        assert_eq!(sniff, Sniff::Yaml);
-        assert!(inner.contains("```rust"));
-        assert!(doc.body.is_empty());
+        assert_eq!(doc.fields, Fields::None);
+        assert_eq!(doc.body, [input]);
     }
 
     #[test]
@@ -737,7 +959,7 @@ mod tests {
 
     #[test]
     fn unclosed_fields_fence_is_syntax() {
-        let err = parse("```yaml\nfield1: foo\n").expect_err("unclosed");
+        let err = parse("```yaml\nfield1: foo\n", 2).expect_err("unclosed");
         assert_eq!(err.kind(), crate::ErrorKind::Syntax);
         assert_eq!(err.offset(), Some(0));
         assert!(err.to_string().contains("unclosed fence"), "{err}");
@@ -746,7 +968,7 @@ mod tests {
     #[test]
     fn unclosed_body_fence_is_syntax() {
         let input = "```yaml\nk: 1\n```\nsee\n```text\n---\n";
-        let err = parse(input).expect_err("unclosed body fence");
+        let err = parse(input, 2).expect_err("unclosed body fence");
         assert_eq!(err.kind(), crate::ErrorKind::Syntax);
         assert!(err.offset().is_some());
     }
@@ -754,6 +976,7 @@ mod tests {
     /// Bare YAML whose first key is a list: CommonMark reads the rest of the
     /// mapping as that list item's content, so a fence inside a nested block
     /// scalar is indented past three spaces on the raw line and still closed.
+    #[cfg(feature = "yaml")]
     const BARE_YAML_WITH_NESTED_FENCE: &str = "artifacts:\n\
 - path: a.md\n  kind: doc\n\
 claim: Keep one pass.\n\
@@ -762,10 +985,11 @@ status: candidate\n\
 ---\n\
 Body text.\n";
 
+    #[cfg(feature = "yaml")]
     #[test]
     fn closed_fence_inside_a_container_is_not_unclosed() {
         let doc = parse_ok(BARE_YAML_WITH_NESTED_FENCE);
-        let Fields::Bare { sniff, inner } = &doc.fields else {
+        let Fields::Bare { sniff, inner, .. } = &doc.fields else {
             panic!("expected bare fields, got {doc:?}");
         };
         assert_eq!(*sniff, Sniff::Yaml);
@@ -788,7 +1012,7 @@ Body text.\n";
     #[test]
     fn a_fence_in_a_list_left_open_is_still_unclosed() {
         let input = "```yaml\nk: 1\n```\n- item\n\n  ```text\n  code\n";
-        let err = parse(input).expect_err("unclosed fence in a list item");
+        let err = parse(input, 2).expect_err("unclosed fence in a list item");
         assert_eq!(err.kind(), crate::ErrorKind::Syntax);
     }
 

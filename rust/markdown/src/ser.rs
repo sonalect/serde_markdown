@@ -1,27 +1,47 @@
 //! Serialize a `Markdown` root struct to a document.
 
+use std::cell::Cell;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::Write;
 
 use serde::ser::{Impossible, Serialize, SerializeSeq, SerializeStruct, Serializer};
-use serde_json::{Map, Value};
+use serde_json::Value;
 
 use crate::error::Error;
 use crate::format::{self, FieldsLayout, Format};
 use crate::markdown::Markdown;
+use crate::parse::{SEPARATOR, check_middle_section, starts_with_dash_rule, would_read_fields};
 
 /// Serialize `value` as a fenced YAML Markdown document.
 ///
-/// The fields block is a labeled `yaml` fence. Body `String` fields and types
-/// whose serde is a JSON string (well-known `Timestamp`, `Duration`,
-/// `FieldMask`) are written as raw section text; nested objects and scalars
-/// use the fence-format dump.
-/// Sections are joined with `\n---\n`. Trailing `None` body fields are omitted;
-/// a middle `None` is an empty section; `Some("")` is the two characters `""`.
-/// There is no leading blank line, one newline after the closing fence, a
-/// trailing newline at EOF, and no trailing `---` after the last emitted
-/// section.
+/// The fields block is a labeled `yaml` fence; its keys follow the order in
+/// which the value's `Serialize` impl emits them (declaration order for a
+/// derived struct, proto field order for a buffa message). Body `String`
+/// fields and types whose serde is a JSON string (well-known `Timestamp`,
+/// `Duration`, `FieldMask`) are written as raw section text; nested objects
+/// and scalars use the fence-format dump.
+///
+/// Body sections are joined with `\n---\n`. Text is verbatim: the crate adds
+/// no newline to a section and removes none, so the document ends exactly
+/// where the last body section ends (there is no newline added at EOF) and a
+/// body section that ends with a newline keeps it. The last body field is the
+/// rest of the document, so it may hold `---` lines, code fences, tables, and
+/// setext underlines. A body field that is not the last is split by a reader
+/// on top-level `---`, so such a value, one that contains a top-level `---`
+/// line, an unclosed code fence, or ends with a carriage return, is
+/// [`crate::ErrorKind::Body`] at write time.
+///
+/// Trailing `None` body fields are omitted (the last body field has no
+/// separator, so it reads back as absent). A `None` that is not trailing is an
+/// empty section. For the last body field `Some("")` is its separator followed
+/// by nothing, and `Some("\"\"")` is literal text. For a body field that is not
+/// the last, an optional `Some("")` is the two characters `""`, so an optional
+/// `Some("\"\"")` there is [`crate::ErrorKind::Body`]. A single body field after a
+/// fenced block, or in a document with no fields, is written as is, with one
+/// leading `---` line when its value is empty or starts with a `---` line. A
+/// document with no fields whose body a reader would take for fields starts with
+/// an explicit empty fields block.
 ///
 /// [`to_vec`] is these UTF-8 bytes. [`to_writer`] writes the same document.
 pub fn to_string<T: Serialize + Markdown>(value: &T) -> Result<String, Error> {
@@ -32,7 +52,9 @@ pub fn to_string<T: Serialize + Markdown>(value: &T) -> Result<String, Error> {
 ///
 /// Same layout as [`to_string`]: a labeled fence (`yaml`, `json`, or `toml`)
 /// then body sections. JSON is pretty-printed with 2-space indent; TOML uses
-/// that crate's pretty printer.
+/// that crate's pretty printer. Keys keep the order of the value's `Serialize`
+/// impl in every format; TOML writes plain values before tables, as TOML
+/// requires.
 pub fn to_string_with_format<T: Serialize + Markdown>(
     value: &T,
     format: Format,
@@ -52,8 +74,19 @@ pub fn to_string_with<T: Serialize + Markdown>(
 ) -> Result<String, Error> {
     let captured = value.serialize(RootSerializer {
         body_fields: T::BODY_FIELDS,
+        format,
     })?;
-    render(captured, T::BODY_FIELDS, format, layout)
+    let front = if captured.front_len > 0 {
+        let front = FrontMatter {
+            value,
+            body_fields: T::BODY_FIELDS,
+            len: captured.front_len,
+        };
+        Some(format::dump(&front, format)?)
+    } else {
+        None
+    };
+    render(front, captured.body, T::BODY_FIELDS, format, layout)
 }
 
 /// Serialize `value` as UTF-8 bytes of a fenced YAML Markdown document.
@@ -77,20 +110,28 @@ where
 }
 
 struct Captured {
-    fields: Map<String, Value>,
+    /// Number of root fields that are not body fields.
+    front_len: usize,
     body: HashMap<String, BodyValue>,
 }
 
 enum BodyValue {
-    Json(Value),
-    /// Raw UTF-8 from `serialize_bytes` / `serialize_byte_buf` / a non-empty
-    /// seq of `u8`. Empty JSON strings still use the `""` encoding; this
-    /// variant is written as-is, including empty.
-    Utf8(String),
+    /// Absent: JSON `null`, `None`, an unset message.
+    Null,
+    /// Text a reader gets back as this value: a string, or raw UTF-8 from
+    /// `serialize_bytes` / `serialize_byte_buf` / a non-empty seq of `u8`.
+    Text {
+        text: String,
+        /// The value was serialized through `serialize_some`.
+        optional: bool,
+    },
+    /// A scalar, object, or array written in the fence language.
+    Dumped(String),
 }
 
 struct RootSerializer {
     body_fields: &'static [&'static str],
+    format: Format,
 }
 
 fn not_named_struct() -> Error {
@@ -248,7 +289,8 @@ impl Serializer for RootSerializer {
     ) -> Result<Self::SerializeStruct, Self::Error> {
         Ok(StructSerializer {
             body_fields: self.body_fields,
-            fields: Map::new(),
+            format: self.format,
+            front_len: 0,
             body: HashMap::new(),
         })
     }
@@ -266,7 +308,8 @@ impl Serializer for RootSerializer {
 
 struct StructSerializer {
     body_fields: &'static [&'static str],
-    fields: Map<String, Value>,
+    format: Format,
+    front_len: usize,
     body: HashMap<String, BodyValue>,
 }
 
@@ -280,100 +323,375 @@ impl SerializeStruct for StructSerializer {
         value: &T,
     ) -> Result<(), Self::Error> {
         if self.body_fields.contains(&key) {
-            self.body.insert(key.to_owned(), capture_body_field(value)?);
+            let captured = capture_body_field(value, self.format)?;
+            self.body.insert(key.to_owned(), captured);
         } else {
-            let json = serde_json::to_value(value).map_err(Error::type_error)?;
-            self.fields.insert(key.to_owned(), json);
+            // Front-matter fields are written later, straight from the value,
+            // so that the encoder sees them in the order they were declared.
+            self.front_len += 1;
         }
         Ok(())
     }
 
     fn end(self) -> Result<Self::Ok, Self::Error> {
         Ok(Captured {
-            fields: self.fields,
+            front_len: self.front_len,
             body: self.body,
         })
     }
 }
 
+/// The root value without its body fields, serialized in the order the value
+/// emits them.
+struct FrontMatter<'a, T: ?Sized> {
+    value: &'a T,
+    body_fields: &'static [&'static str],
+    len: usize,
+}
+
+impl<T: Serialize + ?Sized> Serialize for FrontMatter<'_, T> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.value.serialize(FrontOnly {
+            inner: serializer,
+            body_fields: self.body_fields,
+            len: self.len,
+        })
+    }
+}
+
+/// Forwards the root struct to `inner` and drops its body fields.
+struct FrontOnly<S> {
+    inner: S,
+    body_fields: &'static [&'static str],
+    len: usize,
+}
+
+struct FrontStruct<S> {
+    inner: S,
+    body_fields: &'static [&'static str],
+}
+
+impl<S: SerializeStruct> SerializeStruct for FrontStruct<S> {
+    type Ok = S::Ok;
+    type Error = S::Error;
+
+    fn serialize_field<T: ?Sized + Serialize>(
+        &mut self,
+        key: &'static str,
+        value: &T,
+    ) -> Result<(), Self::Error> {
+        if self.body_fields.contains(&key) {
+            return Ok(());
+        }
+        self.inner.serialize_field(key, value)
+    }
+
+    fn skip_field(&mut self, key: &'static str) -> Result<(), Self::Error> {
+        self.inner.skip_field(key)
+    }
+
+    fn end(self) -> Result<Self::Ok, Self::Error> {
+        self.inner.end()
+    }
+}
+
+macro_rules! front_denies {
+    ($($method:ident($ty:ty)),* $(,)?) => {
+        $(
+            fn $method(self, _v: $ty) -> Result<Self::Ok, Self::Error> {
+                Err(front_not_struct())
+            }
+        )*
+    };
+}
+
+fn front_not_struct<E: serde::ser::Error>() -> E {
+    E::custom("root must be a named struct")
+}
+
+impl<S: Serializer> Serializer for FrontOnly<S> {
+    type Ok = S::Ok;
+    type Error = S::Error;
+    type SerializeSeq = Impossible<S::Ok, S::Error>;
+    type SerializeTuple = Impossible<S::Ok, S::Error>;
+    type SerializeTupleStruct = Impossible<S::Ok, S::Error>;
+    type SerializeTupleVariant = Impossible<S::Ok, S::Error>;
+    type SerializeMap = Impossible<S::Ok, S::Error>;
+    type SerializeStruct = FrontStruct<S::SerializeStruct>;
+    type SerializeStructVariant = Impossible<S::Ok, S::Error>;
+
+    front_denies! {
+        serialize_bool(bool),
+        serialize_i8(i8),
+        serialize_i16(i16),
+        serialize_i32(i32),
+        serialize_i64(i64),
+        serialize_u8(u8),
+        serialize_u16(u16),
+        serialize_u32(u32),
+        serialize_u64(u64),
+        serialize_f32(f32),
+        serialize_f64(f64),
+        serialize_char(char),
+        serialize_str(&str),
+        serialize_bytes(&[u8]),
+        serialize_unit_struct(&'static str),
+    }
+
+    fn serialize_none(self) -> Result<Self::Ok, Self::Error> {
+        Err(front_not_struct())
+    }
+
+    fn serialize_some<T: ?Sized + Serialize>(self, _value: &T) -> Result<Self::Ok, Self::Error> {
+        Err(front_not_struct())
+    }
+
+    fn serialize_unit(self) -> Result<Self::Ok, Self::Error> {
+        Err(front_not_struct())
+    }
+
+    fn serialize_unit_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+    ) -> Result<Self::Ok, Self::Error> {
+        Err(front_not_struct())
+    }
+
+    fn serialize_newtype_struct<T: ?Sized + Serialize>(
+        self,
+        _name: &'static str,
+        _value: &T,
+    ) -> Result<Self::Ok, Self::Error> {
+        Err(front_not_struct())
+    }
+
+    fn serialize_newtype_variant<T: ?Sized + Serialize>(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _value: &T,
+    ) -> Result<Self::Ok, Self::Error> {
+        Err(front_not_struct())
+    }
+
+    fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq, Self::Error> {
+        Err(front_not_struct())
+    }
+
+    fn serialize_tuple(self, _len: usize) -> Result<Self::SerializeTuple, Self::Error> {
+        Err(front_not_struct())
+    }
+
+    fn serialize_tuple_struct(
+        self,
+        _name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeTupleStruct, Self::Error> {
+        Err(front_not_struct())
+    }
+
+    fn serialize_tuple_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeTupleVariant, Self::Error> {
+        Err(front_not_struct())
+    }
+
+    fn serialize_map(self, _len: Option<usize>) -> Result<Self::SerializeMap, Self::Error> {
+        Err(front_not_struct())
+    }
+
+    fn serialize_struct(
+        self,
+        name: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeStruct, Self::Error> {
+        let inner = self.inner.serialize_struct(name, self.len)?;
+        Ok(FrontStruct {
+            inner,
+            body_fields: self.body_fields,
+        })
+    }
+
+    fn serialize_struct_variant(
+        self,
+        _name: &'static str,
+        _variant_index: u32,
+        _variant: &'static str,
+        _len: usize,
+    ) -> Result<Self::SerializeStructVariant, Self::Error> {
+        Err(front_not_struct())
+    }
+
+    fn is_human_readable(&self) -> bool {
+        self.inner.is_human_readable()
+    }
+}
+
+/// Assemble the document.
+///
+/// `front` is the encoded fields block, if any. Body text is written as is.
+/// The separator between two body sections is `\n---\n`; the line break of
+/// the closing fence (or of the bare fields' last line) also ends an empty
+/// first section.
 fn render(
-    captured: Captured,
+    front: Option<String>,
+    mut body: HashMap<String, BodyValue>,
     body_fields: &'static [&'static str],
     format: Format,
     layout: FieldsLayout,
 ) -> Result<String, Error> {
-    let mut out = String::new();
-    let has_fields = !captured.fields.is_empty();
-    if has_fields {
-        let dumped = format::dump(&Value::Object(captured.fields), format)?;
-        match layout {
-            FieldsLayout::Fenced => {
-                out.push_str("```");
-                out.push_str(fence_lang(format));
-                out.push('\n');
-                push_with_newline(&mut out, &dumped);
-                out.push_str("```\n");
-            }
-            FieldsLayout::Bare => push_with_newline(&mut out, &dumped),
-        }
-    }
-
-    let mut slots = Vec::with_capacity(body_fields.len());
-    for name in body_fields {
-        slots.push(body_slot(captured.body.get(*name), format)?);
-    }
+    let count = body_fields.len();
+    let mut slots: Vec<BodyValue> = body_fields
+        .iter()
+        .map(|name| body.remove(*name).unwrap_or(BodyValue::Null))
+        .collect();
     while slots
-        .pop_if(|slot| matches!(slot, BodySlot::Absent))
+        .pop_if(|slot| matches!(slot, BodyValue::Null))
         .is_some()
     {}
 
-    for (i, slot) in slots.iter().enumerate() {
-        let need_sep = i > 0 || (has_fields && layout == FieldsLayout::Bare);
-        if need_sep {
-            if !out.ends_with('\n') {
-                out.push('\n');
+    let mut texts = Vec::with_capacity(slots.len());
+    for (i, slot) in slots.into_iter().enumerate() {
+        texts.push(section_text(slot, i + 1 == count)?);
+    }
+
+    // After a fence or a bare mapping the document already ends in a line
+    // break, which serves as the break that ends an empty first section.
+    let after_fields = front.is_some();
+    let separated = after_fields && layout == FieldsLayout::Bare;
+    let mut region = String::new();
+    if count == 1 {
+        if let Some(text) = texts.first() {
+            if !separated && (text.is_empty() || starts_with_dash_rule(text)) {
+                region.push_str("---\n");
             }
-            out.push_str("---\n");
+            region.push_str(text);
         }
-        match slot {
-            BodySlot::Absent => {
-                if need_sep {
-                    out.push('\n');
-                }
+    } else {
+        for (i, text) in texts.iter().enumerate() {
+            if i == 1 && after_fields && texts[0].is_empty() {
+                region.push_str("---\n");
+            } else if i > 0 {
+                region.push_str(SEPARATOR);
             }
-            BodySlot::Raw(text) => out.push_str(text),
+            region.push_str(text);
+        }
+        // An empty section at the end of the document is no section: close it.
+        if texts.len() < count
+            && let Some(last) = texts.last()
+            && last.is_empty()
+        {
+            region.push_str(if texts.len() == 1 && after_fields {
+                "---\n"
+            } else {
+                SEPARATOR
+            });
         }
     }
 
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
+    let mut out = String::new();
+    match front {
+        Some(dumped) => {
+            match layout {
+                FieldsLayout::Fenced => {
+                    out.push_str("```");
+                    out.push_str(fence_lang(format));
+                    out.push('\n');
+                    push_with_newline(&mut out, &dumped);
+                    out.push_str("```\n");
+                }
+                FieldsLayout::Bare => push_with_newline(&mut out, &dumped),
+            }
+            if separated && !region.is_empty() {
+                out.push_str("---\n");
+            }
+        }
+        None => {
+            if !region.is_empty() && would_read_fields(&region, count)? {
+                out.push_str(empty_fields_block(format));
+            }
+        }
     }
+    out.push_str(&region);
     Ok(out)
 }
 
-enum BodySlot {
-    Absent,
-    Raw(String),
-}
-
-fn body_slot(value: Option<&BodyValue>, format: Format) -> Result<BodySlot, Error> {
-    match value {
-        None | Some(BodyValue::Json(Value::Null)) => Ok(BodySlot::Absent),
-        Some(BodyValue::Utf8(s)) => Ok(BodySlot::Raw(s.clone())),
-        Some(BodyValue::Json(Value::String(s))) if s.is_empty() => {
-            Ok(BodySlot::Raw("\"\"".to_owned()))
-        }
-        Some(BodyValue::Json(Value::String(s))) => Ok(BodySlot::Raw(s.clone())),
-        Some(BodyValue::Json(other)) => Ok(BodySlot::Raw(format::dump(other, format)?)),
+/// An explicit fields block with no fields, written before a body-only
+/// document whose first text a reader would take for fields.
+fn empty_fields_block(format: Format) -> &'static str {
+    match format {
+        Format::Yaml => "```yaml\n{}\n```\n",
+        Format::Json => "```json\n{}\n```\n",
+        Format::Toml => "```toml\n```\n",
     }
 }
 
-fn capture_body_field<T: ?Sized + Serialize>(value: &T) -> Result<BodyValue, Error> {
-    match value.serialize(BytesProbe) {
-        Ok(text) => Ok(BodyValue::Utf8(text)),
+/// The text a reader gets back for this body value, as it goes between
+/// separators. `last` is true for the last declared body field.
+fn section_text(value: BodyValue, last: bool) -> Result<String, Error> {
+    let text = match value {
+        BodyValue::Null => return Ok(String::new()),
+        BodyValue::Dumped(dumped) if last => return Ok(dumped),
+        // The separator that follows ends the encoder's final line.
+        BodyValue::Dumped(mut dumped) => {
+            if dumped.ends_with('\n') {
+                dumped.pop();
+            }
+            dumped
+        }
+        BodyValue::Text { text, .. } if last => return Ok(text),
+        BodyValue::Text { text, optional } => {
+            if text.is_empty() {
+                return Ok(if optional {
+                    EMPTY_STRING_SECTION.to_owned()
+                } else {
+                    String::new()
+                });
+            }
+            if optional && text == EMPTY_STRING_SECTION {
+                return Err(Error::body(
+                    "an optional body value that is not the last cannot be the two \
+                     characters \"\"; they stand for an empty value there",
+                ));
+            }
+            text
+        }
+    };
+    check_middle_section(&text)?;
+    Ok(text)
+}
+
+/// Two characters that stand for an optional empty string in a body section
+/// that is not the last (an empty section there is `None`).
+const EMPTY_STRING_SECTION: &str = "\"\"";
+
+fn capture_body_field<T: ?Sized + Serialize>(
+    value: &T,
+    format: Format,
+) -> Result<BodyValue, Error> {
+    let some = Cell::new(false);
+    match value.serialize(BytesProbe { some: &some }) {
+        Ok(text) => Ok(BodyValue::Text {
+            text,
+            optional: some.get(),
+        }),
         Err(ProbeError::NotBytes) => {
             let json = serde_json::to_value(value).map_err(Error::type_error)?;
-            Ok(BodyValue::Json(json))
+            match json {
+                Value::Null => Ok(BodyValue::Null),
+                Value::String(text) => Ok(BodyValue::Text {
+                    text,
+                    optional: some.get(),
+                }),
+                _ => Ok(BodyValue::Dumped(format::dump(value, format)?)),
+            }
         }
         Err(ProbeError::InvalidUtf8) => Err(Error::body("invalid UTF-8 in byte body field")),
         Err(ProbeError::Other(err)) => Err(err),
@@ -414,13 +732,17 @@ impl serde::ser::Error for ProbeError {
     }
 }
 
-struct BytesProbe;
+/// Recognizes a byte body field, and notes whether the value came through
+/// `serialize_some` (an optional field that is set).
+struct BytesProbe<'a> {
+    some: &'a Cell<bool>,
+}
 
 fn not_bytes<T>() -> Result<T, ProbeError> {
     Err(ProbeError::NotBytes)
 }
 
-impl Serializer for BytesProbe {
+impl Serializer for BytesProbe<'_> {
     type Ok = String;
     type Error = ProbeError;
     type SerializeSeq = ProbeSeq;
@@ -492,6 +814,7 @@ impl Serializer for BytesProbe {
     }
 
     fn serialize_some<T: ?Sized + Serialize>(self, value: &T) -> Result<Self::Ok, Self::Error> {
+        self.some.set(true);
         value.serialize(self)
     }
 
@@ -819,8 +1142,10 @@ mod tests {
         let md = to_string(&values::page()).expect("serialize");
         assert!(md.starts_with("```yaml\n"), "{md}");
         assert!(!md.starts_with('\n'), "{md}");
-        assert!(md.ends_with('\n'), "{md}");
-        assert!(md.contains("```\nText1 bla bla bla\n---\n"), "{md}");
+        assert!(
+            md.ends_with("```\nText1 bla bla bla\n---\nText2 bal bla bla"),
+            "{md}"
+        );
         assert!(!md.contains("```\n\n"), "{md}");
         assert!(!md.contains("```yml"), "{md}");
         assert!(md.contains("field1: foo"), "{md}");
@@ -891,11 +1216,13 @@ mod tests {
             to_string_with(&values::page(), Format::Yaml, FieldsLayout::Bare).expect("serialize");
         assert!(!md.contains("```"), "{md}");
         assert!(!md.starts_with('\n'), "{md}");
-        assert!(md.ends_with('\n'), "{md}");
+        assert!(
+            md.ends_with("---\nText1 bla bla bla\n---\nText2 bal bla bla"),
+            "{md}"
+        );
         assert!(md.contains("field1: foo"), "{md}");
         assert!(md.contains("field2: bar"), "{md}");
         assert!(md.contains("field3: 1"), "{md}");
-        assert!(md.contains("---\nText1 bla bla bla\n---\n"), "{md}");
         let trimmed = md.trim_end();
         assert!(!trimmed.ends_with("---"), "{md}");
         let back: types::Page = crate::from_str(&md).expect("deserialize");
@@ -992,7 +1319,7 @@ mod tests {
         let value = values::optional_middle_none();
         assert_optional_round_trip(&value, goldens::OPTIONAL_MIDDLE_NONE);
         let md = to_string(&value).expect("serialize");
-        assert!(md.contains("```\na\n---\n\n---\nc\n"), "{md}");
+        assert!(md.ends_with("```\na\n---\n\n---\nc"), "{md}");
     }
 
     #[cfg(feature = "yaml")]
@@ -1001,7 +1328,7 @@ mod tests {
         let value = values::optional_trailing_none();
         assert_optional_round_trip(&value, goldens::OPTIONAL_TRAILING_NONE);
         let md = to_string(&value).expect("serialize");
-        assert!(md.contains("```\na\n"), "{md}");
+        assert!(md.ends_with("```\na"), "{md}");
         assert!(!md.contains("---"), "{md}");
         let trimmed = md.trim_end();
         assert!(!trimmed.ends_with("---"), "{md}");
@@ -1013,7 +1340,7 @@ mod tests {
         let value = values::optional_leading_none();
         assert_optional_round_trip(&value, goldens::OPTIONAL_LEADING_NONE);
         let md = to_string(&value).expect("serialize");
-        assert!(md.contains("```\n---\na\n"), "{md}");
+        assert!(md.ends_with("```\n---\na"), "{md}");
     }
 
     #[cfg(feature = "yaml")]
@@ -1022,7 +1349,7 @@ mod tests {
         let value = values::optional_empty_string();
         assert_optional_round_trip(&value, goldens::OPTIONAL_EMPTY_STRING);
         let md = to_string(&value).expect("serialize");
-        assert!(md.contains("```\na\n---\n\"\"\n"), "{md}");
+        assert!(md.ends_with("```\na\n---\n\"\""), "{md}");
     }
 
     #[cfg(feature = "yaml")]
@@ -1160,7 +1487,7 @@ mod tests {
             "Timestamp body must be raw RFC 3339 after the fence, got {md}"
         );
         assert!(
-            md.contains("---\n1.5s\n") || md.contains("---\n1.500s\n"),
+            md.ends_with("---\n1.5s") || md.ends_with("---\n1.500s"),
             "Duration body must be raw proto3 JSON, got {md}"
         );
         assert!(
@@ -1379,7 +1706,7 @@ mod tests {
         assert!(md.contains("```yaml\n"), "{md}");
         assert!(md.contains("title: bin"), "{md}");
         assert!(
-            md.contains("```\ncafé\n"),
+            md.ends_with("```\ncafé"),
             "Vec<u8> body must be raw UTF-8, got {md}"
         );
         assert!(
@@ -1398,7 +1725,7 @@ mod tests {
             data: ByteField(b"hello".to_vec()),
         };
         let md = to_string(&value).expect("serialize");
-        assert!(md.contains("```\nhello\n"), "{md}");
+        assert!(md.ends_with("```\nhello"), "{md}");
         let back: ByteBufDoc = crate::from_str(&md).expect("round-trip");
         assert_eq!(value, back);
     }

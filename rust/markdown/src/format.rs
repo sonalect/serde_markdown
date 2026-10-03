@@ -6,6 +6,7 @@
 use std::error::Error as StdError;
 use std::fmt;
 
+use serde::Serialize;
 use serde_json::Value;
 
 use crate::error::Error;
@@ -47,8 +48,9 @@ impl fmt::Display for Format {
     }
 }
 
-/// Encode a fields mapping in `format`.
-pub(crate) fn dump(value: &Value, format: Format) -> Result<String, Error> {
+/// Encode `value` in `format`. The encoder writes keys in the order the
+/// value's `Serialize` impl emits them.
+pub(crate) fn dump<T: Serialize + ?Sized>(value: &T, format: Format) -> Result<String, Error> {
     match format {
         Format::Yaml => dump_yaml(value),
         Format::Json => dump_json(value),
@@ -88,7 +90,7 @@ where
     }
 }
 
-fn dump_yaml(value: &Value) -> Result<String, Error> {
+fn dump_yaml<T: Serialize + ?Sized>(value: &T) -> Result<String, Error> {
     #[cfg(feature = "yaml")]
     {
         yaml_serde::to_string(value).map_err(Error::type_error)
@@ -100,7 +102,7 @@ fn dump_yaml(value: &Value) -> Result<String, Error> {
     }
 }
 
-fn dump_json(value: &Value) -> Result<String, Error> {
+fn dump_json<T: Serialize + ?Sized>(value: &T) -> Result<String, Error> {
     #[cfg(feature = "json")]
     {
         serde_json::to_string_pretty(value).map_err(Error::type_error)
@@ -112,7 +114,7 @@ fn dump_json(value: &Value) -> Result<String, Error> {
     }
 }
 
-fn dump_toml(value: &Value) -> Result<String, Error> {
+fn dump_toml<T: Serialize + ?Sized>(value: &T) -> Result<String, Error> {
     #[cfg(feature = "toml")]
     {
         toml::to_string_pretty(value).map_err(Error::type_error)

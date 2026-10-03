@@ -10,7 +10,7 @@ use serde_json::{Map, Value};
 use crate::error::{Error, ErrorKind};
 use crate::format::{self, Format};
 use crate::markdown::Markdown;
-use crate::parse::{self, Document, Fields, Sniff};
+use crate::parse::{self, Document, Fields};
 
 /// Deserialize a Markdown document from `s`.
 ///
@@ -21,24 +21,38 @@ use crate::parse::{self, Document, Fields, Sniff};
 /// JSON or TOML parse failure is [`ErrorKind::FrontMatter`] and does not fall
 /// back to YAML. A bare first slice that is not a mapping is the first body
 /// section. Leading Unicode whitespace and top-level `---` before fields are
-/// discarded. A fenced `yaml` block that is not first is body.
+/// discarded only when fields follow; a document with no fields is body from
+/// its first byte, nothing skipped. A fenced `yaml` block that is not first
+/// is body.
 ///
 /// Body fields listed in [`Markdown::BODY_FIELDS`] are filled from sections
-/// in declaration order. `String` / bytes sections are the raw section text
-/// (interiors are not trimmed). Types whose proto3 JSON serde is a string
-/// (well-known `Timestamp`, `Duration`, `FieldMask`) read that same raw text.
-/// Nested structs, maps, sequences, and scalars parse as the fields format
-/// when a fields block was present, otherwise YAML.
+/// in declaration order. Section text is verbatim: of the bytes between two
+/// separators only the one line break that ends the section is dropped, and
+/// nothing is trimmed. The last body field is every byte after its separator
+/// up to the end of the document, never parsed, so it may hold `---` lines,
+/// code fences, tables, and setext underlines; the earlier fields end at the
+/// first top-level `---` lines. `String` / bytes sections are the raw section
+/// text. Types whose proto3 JSON serde is a string (well-known `Timestamp`,
+/// `Duration`, `FieldMask`) read that same raw text. Nested structs, maps,
+/// sequences, and scalars parse as the fields format when a fields block was
+/// present, otherwise YAML.
 ///
 /// Protobuf `Any` packing is not installed here. Callers who need `Any` must
 /// install a type registry (`buffa_types::register_wkt_types`) the same way
 /// they do for `serde_json`.
 ///
-/// Trailing omitted sections become `None` on optional fields. An empty
-/// section is `None`; a section whose content is the two characters `""`
-/// is `Some("")`. Extra sections, a missing required section, and an empty
-/// section for a required structured field are [`ErrorKind::Body`]. A decoder
-/// failure on a structured section is [`ErrorKind::Body`] with `source` set.
+/// A body field whose section is missing is absent: `None` on an optional
+/// field. The last body field is present when its separator is, so a
+/// separator followed by nothing is `Some("")`, and the two characters `""`
+/// after it are literal text. In a section that is not the last, an empty
+/// section is `None` for an optional field and `""` for a required string,
+/// and an optional field reads the two characters `""` as `Some("")`. With a
+/// single body field after a fenced block, or in a document with no fields,
+/// a first line that is a `---` rule is that field's separator and is dropped
+/// (once). A missing required section, extra body text when there are no body
+/// fields, and an empty section for a required structured field are
+/// [`ErrorKind::Body`]. A decoder failure on a structured section is
+/// [`ErrorKind::Body`] with `source` set.
 ///
 /// [`from_slice`] is the same mapping on UTF-8 bytes. [`from_reader`] reads
 /// a stream to the end, then uses [`from_slice`].
@@ -46,7 +60,7 @@ pub fn from_str<T>(s: &str) -> Result<T, Error>
 where
     T: DeserializeOwned + Markdown,
 {
-    let decoded = decode_document(parse::parse(s)?)?;
+    let decoded = decode_document(parse::parse(s, T::BODY_FIELDS.len())?)?;
     if decoded.body.len() > T::BODY_FIELDS.len() {
         return Err(Error::body(format!(
             "expected at most {} body section(s), found {}",
@@ -106,7 +120,7 @@ fn decode_document(doc: Document) -> Result<Decoded, Error> {
             sniff,
             inner,
         } => {
-            let format = sniff_format(labeled.unwrap_or(sniff));
+            let format = labeled.unwrap_or(sniff).format();
             let map = mapping_or_type_error(format::load(&inner, format)?)?;
             Ok(Decoded {
                 fields: map,
@@ -114,23 +128,16 @@ fn decode_document(doc: Document) -> Result<Decoded, Error> {
                 format,
             })
         }
-        Fields::Bare { sniff, inner } => match load_bare_mapping(&inner, sniff)? {
-            Some(map) => Ok(Decoded {
-                fields: map,
-                body,
-                format: sniff_format(sniff),
-            }),
-            None => {
-                let mut sections = Vec::with_capacity(body.len() + 1);
-                sections.push(inner);
-                sections.extend(body);
-                Ok(Decoded {
-                    fields: Map::new(),
-                    body: sections,
-                    format: Format::Yaml,
-                })
-            }
-        },
+        Fields::Bare { sniff, map, .. } => Ok(Decoded {
+            fields: map,
+            body,
+            format: sniff.format(),
+        }),
+        Fields::None => Ok(Decoded {
+            fields: Map::new(),
+            body,
+            format: Format::Yaml,
+        }),
     }
 }
 
@@ -150,36 +157,21 @@ fn mapping_from_value(value: Value) -> Option<Map<String, Value>> {
     }
 }
 
-/// Bare first slice: mapping → fields. YAML that is not a mapping (or that
-/// the YAML decoder rejects) → `None` (treat as body). JSON/TOML decode
-/// failure stays [`ErrorKind::FrontMatter`].
-fn load_bare_mapping(inner: &str, sniff: Sniff) -> Result<Option<Map<String, Value>>, Error> {
-    let format = sniff_format(sniff);
-    let value = match format::load(inner, format) {
-        Ok(value) => value,
-        Err(err) if err.kind() == ErrorKind::FormatDisabled => return Err(err),
-        Err(err) if matches!(format, Format::Json | Format::Toml) => return Err(err),
-        Err(_) => return Ok(None),
-    };
-    Ok(mapping_from_value(value))
-}
-
-fn sniff_format(sniff: Sniff) -> Format {
-    match sniff {
-        Sniff::Yaml => Format::Yaml,
-        Sniff::Json => Format::Json,
-        Sniff::Toml => Format::Toml,
-    }
-}
-
-/// Two characters that encode optional `Some("")` (distinct from an empty
-/// section, which is `None`).
+/// Two characters that stand for `Some("")` in a section that is not the
+/// last (an empty section there is `None`).
 const EMPTY_STRING_SECTION: &str = "\"\"";
 
 #[derive(Clone)]
 enum SectionSlot {
+    /// The document has no such section.
     Absent,
+    /// A section that is not the last and has no text.
     Empty,
+    /// A section that is not the last and holds the two characters `""`.
+    /// An optional field reads it as `Some("")`; any other type reads the text.
+    QuotedEmpty,
+    /// Section text. Empty only for a last body field whose separator is
+    /// followed by nothing.
     Text(String),
 }
 
@@ -187,28 +179,12 @@ fn section_slots(n: usize, sections: &[String]) -> Vec<SectionSlot> {
     (0..n)
         .map(|i| match sections.get(i) {
             None => SectionSlot::Absent,
-            Some(section) => {
-                let text = section_text(section);
-                if text.is_empty() {
-                    SectionSlot::Empty
-                } else {
-                    SectionSlot::Text(text.to_owned())
-                }
-            }
+            Some(text) if i + 1 == n => SectionSlot::Text(text.clone()),
+            Some(text) if text.is_empty() => SectionSlot::Empty,
+            Some(text) if text == EMPTY_STRING_SECTION => SectionSlot::QuotedEmpty,
+            Some(text) => SectionSlot::Text(text.clone()),
         })
         .collect()
-}
-
-/// Drop the document line terminator after a section. Interior blank lines and
-/// trailing spaces stay in the section text.
-fn section_text(section: &str) -> &str {
-    match section.strip_suffix("\r\n") {
-        Some(s) => s,
-        None => match section.strip_suffix('\n') {
-            Some(s) => s,
-            None => section,
-        },
-    }
 }
 
 fn into_body(err: Error) -> Error {
@@ -347,6 +323,13 @@ impl SectionDeserializer {
         match self.slot {
             SectionSlot::Absent => Err(Error::body("missing section")),
             SectionSlot::Empty => Err(Error::body("empty section for required structured field")),
+            SectionSlot::Text(text) if text.is_empty() => {
+                Err(Error::body("empty section for required structured field"))
+            }
+            SectionSlot::QuotedEmpty => Ok(JsonDe(format::load_body(
+                EMPTY_STRING_SECTION,
+                self.format,
+            )?)),
             SectionSlot::Text(text) => Ok(JsonDe(format::load_body(&text, self.format)?)),
         }
     }
@@ -367,9 +350,7 @@ impl<'de> Deserializer<'de> for SectionDeserializer {
         match self.slot {
             SectionSlot::Absent => Err(Error::body("missing section")),
             SectionSlot::Empty => visitor.visit_string(String::new()),
-            SectionSlot::Text(text) if text == EMPTY_STRING_SECTION => {
-                visitor.visit_string(String::new())
-            }
+            SectionSlot::QuotedEmpty => visitor.visit_string(EMPTY_STRING_SECTION.to_owned()),
             SectionSlot::Text(text) => visitor.visit_string(text),
         }
     }
@@ -382,8 +363,8 @@ impl<'de> Deserializer<'de> for SectionDeserializer {
         match self.slot {
             SectionSlot::Absent => Err(Error::body("missing section")),
             SectionSlot::Empty => visitor.visit_byte_buf(Vec::new()),
-            SectionSlot::Text(text) if text == EMPTY_STRING_SECTION => {
-                visitor.visit_byte_buf(Vec::new())
+            SectionSlot::QuotedEmpty => {
+                visitor.visit_byte_buf(EMPTY_STRING_SECTION.as_bytes().to_vec())
             }
             SectionSlot::Text(text) => visitor.visit_byte_buf(text.into_bytes()),
         }
@@ -392,6 +373,10 @@ impl<'de> Deserializer<'de> for SectionDeserializer {
     fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
         match self.slot {
             SectionSlot::Absent | SectionSlot::Empty => visitor.visit_none(),
+            SectionSlot::QuotedEmpty => visitor.visit_some(SectionDeserializer {
+                slot: SectionSlot::Text(String::new()),
+                format: self.format,
+            }),
             SectionSlot::Text(_) => visitor.visit_some(self),
         }
     }
@@ -405,6 +390,9 @@ impl<'de> Deserializer<'de> for SectionDeserializer {
             SectionSlot::Absent => Err(Error::body("missing section")),
             SectionSlot::Empty => visitor.visit_seq(JsonSeq {
                 iter: Vec::new().into_iter(),
+            }),
+            SectionSlot::QuotedEmpty => visitor.visit_seq(ByteSeq {
+                iter: EMPTY_STRING_SECTION.as_bytes().to_vec().into_iter(),
             }),
             SectionSlot::Text(text) => match format::load_body(&text, self.format) {
                 Ok(Value::Array(arr)) => visitor.visit_seq(JsonSeq {
@@ -566,7 +554,7 @@ impl<'de> MapAccess<'de> for JsonMap {
 
 #[cfg(test)]
 mod tests {
-    use super::{from_reader, from_slice, from_str, section_text};
+    use super::{from_reader, from_slice, from_str};
     use crate::error::ErrorKind;
     use crate::testdata::{goldens, types, values};
 
@@ -798,8 +786,10 @@ mod tests {
             "---\n",
             "extra\n"
         );
-        let err = from_str::<types::OptionalBody>(input).expect_err("extra section");
-        assert_eq!(err.kind(), ErrorKind::Body);
+        let value = from_str::<types::OptionalBody>(input).expect("the last field takes the rest");
+        assert_eq!(value.first.as_deref(), Some("a"));
+        assert_eq!(value.middle, None);
+        assert_eq!(value.last.as_deref(), Some("c\n---\nextra\n"));
     }
 
     #[cfg(feature = "yaml")]
@@ -942,8 +932,9 @@ mod tests {
             "---\n",
             "extra\n"
         );
-        let err = from_str::<types::Page>(input).expect_err("extra section");
-        assert_eq!(err.kind(), ErrorKind::Body);
+        let value = from_str::<types::Page>(input).expect("the last field takes the rest");
+        assert_eq!(value.text1, "Text1 bla bla bla");
+        assert_eq!(value.appendix, "Text2 bal bla bla\n---\nextra\n");
     }
 
     #[cfg(feature = "yaml")]
@@ -968,13 +959,6 @@ mod tests {
         let err = from_str::<types::FieldsOnly>(input).expect_err("bad yaml");
         assert_eq!(err.kind(), ErrorKind::FrontMatter);
         assert!(std::error::Error::source(&err).is_some());
-    }
-
-    #[test]
-    fn section_text_keeps_trailing_spaces() {
-        assert_eq!(section_text("hello   \n"), "hello   ");
-        assert_eq!(section_text("hello"), "hello");
-        assert_eq!(section_text("a\n\nb\n"), "a\n\nb");
     }
 
     #[cfg(feature = "yaml")]

@@ -24,8 +24,7 @@ field3: 1
 ```
 Text1 bla bla bla
 ---
-Text2 bal bla bla
-";
+Text2 bal bla bla";
 
 /// Page used by the binary and tests.
 #[must_use]

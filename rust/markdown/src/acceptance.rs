@@ -273,3 +273,222 @@ fn page_split_goldens_keep_inner_breaks_in_one_section() {
     assert_eq!(list.appendix, values::TEXT2);
     assert_eq!(list.text1, "- keep going\n  ---\n- still the same section");
 }
+
+/// Texts the last body field must carry byte for byte: top-level `---`
+/// lines, a GFM table, a setext underline, a fence with `---` inside, the
+/// two characters `""`, empty text, leading and trailing line breaks, CRLF,
+/// Cyrillic, and text that looks like front matter.
+#[cfg(feature = "yaml")]
+const HARD_TEXTS: &[&str] = &[
+    "---",
+    "a\n---\nb",
+    "---\nstarts with a rule",
+    "ends with a rule\n---",
+    "ends with a rule and a break\n---\n",
+    "| a | b |\n|---|---|\n| 1 | 2 |\n",
+    "Title\n---\n\nParagraph",
+    "```\n---\n```\n",
+    "```yaml\nkey: value\n```\n",
+    "\"\"",
+    "",
+    "\n",
+    "\n\n",
+    "\nleading break",
+    "trailing break\n",
+    "two trailing breaks\n\n",
+    "   indented start",
+    "line one\r\nline two\r\n",
+    "Кириллица — текст.\nВторая строка\n",
+    "key: value\nother: 1\n",
+    "***\n___\n",
+];
+
+#[cfg(feature = "yaml")]
+#[test]
+fn the_last_body_field_round_trips_every_hard_text_verbatim() {
+    for text in HARD_TEXTS {
+        let hand = types::Proto3Page {
+            title: "t".into(),
+            body: Some((*text).to_owned()),
+        };
+        let md = to_string(&hand).unwrap_or_else(|err| panic!("{text:?}: {err}"));
+        let back: types::Proto3Page =
+            from_str(&md).unwrap_or_else(|err| panic!("{text:?}: {err}\n{md}"));
+        assert_eq!(back, hand, "hand-written, document:\n{md}");
+
+        let generated = values::proto3_page_generated().with_body(*text);
+        let md = to_string(&generated).unwrap_or_else(|err| panic!("{text:?}: {err}"));
+        let back = from_str(&md).unwrap_or_else(|err| panic!("{text:?}: {err}\n{md}"));
+        assert_eq!(generated, back, "generated, document:\n{md}");
+
+        let mut page = values::page();
+        page.appendix = (*text).to_owned();
+        let md = to_string(&page).unwrap_or_else(|err| panic!("{text:?}: {err}"));
+        let back: types::Page = from_str(&md).unwrap_or_else(|err| panic!("{text:?}: {err}\n{md}"));
+        assert_eq!(back, page, "last of two body fields, document:\n{md}");
+
+        let three = types::OptionalBody {
+            title: "memo".into(),
+            first: Some("a".into()),
+            middle: None,
+            last: Some((*text).to_owned()),
+        };
+        let md = to_string(&three).unwrap_or_else(|err| panic!("{text:?}: {err}"));
+        let back: types::OptionalBody =
+            from_str(&md).unwrap_or_else(|err| panic!("{text:?}: {err}\n{md}"));
+        assert_eq!(back, three, "last of three body fields, document:\n{md}");
+    }
+}
+
+#[cfg(feature = "yaml")]
+#[test]
+fn the_document_ends_with_the_last_byte_of_the_last_body_field() {
+    let page = types::Proto3Page {
+        title: "t".into(),
+        body: Some("no break at the end".into()),
+    };
+    assert!(
+        to_string(&page)
+            .expect("serialize")
+            .ends_with("```\nno break at the end")
+    );
+    let page = types::Proto3Page {
+        title: "t".into(),
+        body: Some("one break\n".into()),
+    };
+    assert!(
+        to_string(&page)
+            .expect("serialize")
+            .ends_with("```\none break\n")
+    );
+}
+
+#[cfg(feature = "yaml")]
+#[test]
+fn an_absent_an_empty_and_a_quoted_last_field_are_three_documents() {
+    let shapes = [None, Some(String::new()), Some("\"\"".to_owned())];
+    let documents: Vec<String> = shapes
+        .iter()
+        .map(|body| {
+            let page = types::Proto3Page {
+                title: "t".into(),
+                body: body.clone(),
+            };
+            let md = to_string(&page).expect("serialize");
+            let back: types::Proto3Page = from_str(&md).expect("deserialize");
+            assert_eq!(back, page, "document:\n{md}");
+            md
+        })
+        .collect();
+    assert_ne!(documents[0], documents[1]);
+    assert_ne!(documents[1], documents[2]);
+    assert_ne!(documents[0], documents[2]);
+}
+
+#[cfg(feature = "yaml")]
+#[test]
+fn a_middle_body_value_with_a_top_level_rule_is_refused_on_write() {
+    let mut page = values::page();
+    page.text1 = "before\n---\nafter".into();
+    let err = to_string(&page).expect_err("middle value with ---");
+    assert_eq!(err.kind(), crate::ErrorKind::Body);
+
+    let three = types::OptionalBody {
+        title: "memo".into(),
+        first: Some("x\n---\ny".into()),
+        middle: None,
+        last: Some("z".into()),
+    };
+    let err = to_string(&three).expect_err("middle value with ---");
+    assert_eq!(err.kind(), crate::ErrorKind::Body);
+
+    let mut fenced = values::page();
+    fenced.text1 = "```\n---\n```".into();
+    let md = to_string(&fenced).expect("a fenced --- does not split");
+    let back: types::Page = from_str(&md).expect("deserialize");
+    assert_eq!(back, fenced);
+}
+
+#[cfg(feature = "yaml")]
+#[test]
+fn a_body_only_document_keeps_a_leading_break_and_a_leading_rule() {
+    for (text1, text2) in [
+        ("\n\nstarts with breaks", "last"),
+        ("   starts with spaces", "---\nlast starts with a rule"),
+        ("key: value", "looks like fields before it"),
+    ] {
+        let value = types::BodyOnly {
+            text1: text1.into(),
+            text2: text2.into(),
+        };
+        let md = to_string(&value).expect("serialize");
+        let back: types::BodyOnly = from_str(&md).expect("deserialize");
+        assert_eq!(back, value, "document:\n{md}");
+    }
+}
+
+/// Fields written in declaration order, not alphabetically.
+#[cfg(feature = "yaml")]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, crate::Markdown)]
+struct Ordered {
+    zeta: String,
+    alpha: i32,
+    mid: bool,
+    #[markdown(body)]
+    body: String,
+}
+
+#[cfg(all(feature = "yaml", feature = "json", feature = "toml"))]
+#[test]
+fn front_matter_keys_follow_declaration_order_in_every_format() {
+    use crate::{FieldsLayout, Format, to_string_with};
+
+    let value = Ordered {
+        zeta: "z".into(),
+        alpha: 1,
+        mid: true,
+        body: "text".into(),
+    };
+    for format in [Format::Yaml, Format::Json, Format::Toml] {
+        for layout in [FieldsLayout::Fenced, FieldsLayout::Bare] {
+            let md = to_string_with(&value, format, layout).expect("serialize");
+            let zeta = md.find("zeta").expect("zeta");
+            let alpha = md.find("alpha").expect("alpha");
+            let mid = md.find("mid").expect("mid");
+            assert!(zeta < alpha && alpha < mid, "{format} {layout:?}:\n{md}");
+            let back: Ordered = from_str(&md).expect("deserialize");
+            assert_eq!(back, value);
+        }
+    }
+
+    let generated = values::well_known_generated();
+    let md = to_string(&generated).expect("serialize");
+    let keys: Vec<&str> = md
+        .lines()
+        .skip(1)
+        .take_while(|line| !line.starts_with("```"))
+        .filter(|line| !line.starts_with(' '))
+        .filter_map(|line| line.split(':').next())
+        .collect();
+    assert_eq!(
+        keys,
+        ["published", "ttl", "meta", "extra", "mask", "count"],
+        "{md}"
+    );
+}
+
+#[cfg(feature = "yaml")]
+#[test]
+fn front_matter_keys_are_read_in_any_order() {
+    let md = "```yaml\nmid: true\nalpha: 1\nzeta: z\n```\ntext";
+    let back: Ordered = from_str(md).expect("deserialize");
+    assert_eq!(
+        back,
+        Ordered {
+            zeta: "z".into(),
+            alpha: 1,
+            mid: true,
+            body: "text".into(),
+        }
+    );
+}

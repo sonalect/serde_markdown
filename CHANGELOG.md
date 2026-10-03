@@ -8,6 +8,33 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-03
+
+### Changed
+
+- The last body field is the rest of the document, verbatim: it is never
+  parsed or trimmed, so it may hold top-level `---` lines, setext underlines,
+  tables, and fences. Before, such a body was written and then refused on read
+  (`found 2 sections`) or cut.
+- Body text is verbatim in both directions: no line break is added at the end
+  of the document or removed from a section. Documents written by 0.3.0 end
+  with the last byte of the last section.
+- The presence of the last body field is its separator: no separator is
+  `None`, a separator followed by nothing is `Some("")`, and `""` after it is
+  literal text. The `""` convention for `Some("")` remains only for optional
+  body fields that are not the last.
+- Front-matter keys are written in declaration order (proto field order for
+  buffa messages) in YAML, JSON, and TOML, not alphabetically. No dependency
+  was added.
+- A bare first slice that is not a mapping is body from its first byte; the
+  leading whitespace and `---` prefix is discarded only before fields.
+
+### Added
+
+- A body value that is not the last and holds a top-level `---` line, an
+  unclosed fence, or a trailing carriage return is `ErrorKind::Body` at write
+  time, instead of a document that cannot be read back.
+
 ## [0.2.3] - 2026-10-02
 
 ### Fixed
