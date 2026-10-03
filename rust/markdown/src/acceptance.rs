@@ -303,6 +303,69 @@ const HARD_TEXTS: &[&str] = &[
     "***\n___\n",
 ];
 
+/// Round-trip `value` through both fields layouts in YAML.
+#[cfg(feature = "yaml")]
+fn assert_round_trip_both_layouts<T>(value: &T, what: &str)
+where
+    T: Serialize + DeserializeOwned + Markdown + PartialEq + Debug,
+{
+    use crate::{FieldsLayout, Format, to_string_with};
+
+    for layout in [FieldsLayout::Fenced, FieldsLayout::Bare] {
+        let md = to_string_with(value, Format::Yaml, layout)
+            .unwrap_or_else(|err| panic!("{what} {layout:?}: {err}"));
+        let back: T = from_str(&md).unwrap_or_else(|err| panic!("{what} {layout:?}: {err}\n{md}"));
+        assert_eq!(&back, value, "{what} {layout:?}, document:\n{md}");
+    }
+}
+
+#[cfg(feature = "yaml")]
+#[test]
+fn the_last_body_field_round_trips_every_hard_text_in_both_layouts() {
+    for text in HARD_TEXTS {
+        let hand = types::Proto3Page {
+            title: "t".into(),
+            body: Some((*text).to_owned()),
+        };
+        assert_round_trip_both_layouts(&hand, &format!("single {text:?}"));
+        let generated = values::proto3_page_generated().with_body(*text);
+        assert_round_trip_both_layouts(&generated, &format!("generated {text:?}"));
+        let mut page = values::page();
+        page.appendix = (*text).to_owned();
+        assert_round_trip_both_layouts(&page, &format!("last of two {text:?}"));
+        let three = types::OptionalBody {
+            title: "memo".into(),
+            first: Some("a".into()),
+            middle: None,
+            last: Some((*text).to_owned()),
+        };
+        assert_round_trip_both_layouts(&three, &format!("last of three {text:?}"));
+    }
+    for (first, middle, last) in [
+        (None, None, Some("")),
+        (Some(""), None, None),
+        (None, Some(""), None),
+        (Some(""), Some(""), Some("")),
+        (None, None, None),
+        (Some("a"), None, None),
+    ] {
+        let value = types::OptionalBody {
+            title: "memo".into(),
+            first: first.map(str::to_owned),
+            middle: middle.map(str::to_owned),
+            last: last.map(str::to_owned),
+        };
+        assert_round_trip_both_layouts(&value, "presence matrix");
+    }
+    for (text1, text2) in [("", ""), ("", "x"), ("x", ""), ("\n", "---")] {
+        let value = types::BodyOnly {
+            text1: text1.into(),
+            text2: text2.into(),
+        };
+        assert_round_trip_both_layouts(&value, "body only");
+    }
+}
+
 #[cfg(feature = "yaml")]
 #[test]
 fn the_last_body_field_round_trips_every_hard_text_verbatim() {
@@ -374,10 +437,8 @@ fn an_absent_an_empty_and_a_quoted_last_field_are_three_documents() {
                 title: "t".into(),
                 body: body.clone(),
             };
-            let md = to_string(&page).expect("serialize");
-            let back: types::Proto3Page = from_str(&md).expect("deserialize");
-            assert_eq!(back, page, "document:\n{md}");
-            md
+            assert_round_trip_both_layouts(&page, "presence");
+            to_string(&page).expect("serialize")
         })
         .collect();
     assert_ne!(documents[0], documents[1]);

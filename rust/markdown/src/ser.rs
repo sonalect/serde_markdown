@@ -609,7 +609,9 @@ fn render(
                 }
                 FieldsLayout::Bare => push_with_newline(&mut out, &dumped),
             }
-            if separated && !region.is_empty() {
+            // A present body, even an empty one, needs the `---` that ends
+            // the bare fields: without it the body reads back as absent.
+            if separated && !texts.is_empty() {
                 out.push_str("---\n");
             }
         }

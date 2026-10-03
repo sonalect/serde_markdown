@@ -8,6 +8,14 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-10-03
+
+### Fixed
+
+- `FieldsLayout::Bare` wrote a present but empty single body field
+  (`Some("")`) without the `---` that ends the fields, so it read back as
+  `None`. The separator is now written whenever a body field is present.
+
 ## [0.3.0] - 2026-10-03
 
 ### Changed
