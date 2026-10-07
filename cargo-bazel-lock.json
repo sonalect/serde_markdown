@@ -1,5 +1,5 @@
 {
-  "checksum": "4b4f8c41521b91073db3653a84243e507c0b620cbfc49d8c1df5c2b72ac39f14",
+  "checksum": "7a20070c325bc888dd1e2b2819a51be7ab340509bb974379268f47b01705e7cf",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -457,6 +457,7 @@
     "bytes 1.12.1": {
       "common_attrs": {
         "crate_features": [
+          "default",
           "std"
         ],
         "edition": "2021"
@@ -832,6 +833,38 @@
           "BuildScript": {
             "crate_name": "build_script_build",
             "crate_root": "build.rs"
+          }
+        }
+      ],
+      "version": "0.3.1"
+    },
+    "example-tokio 0.3.1": {
+      "common_attrs": {
+        "deps": [
+          {
+            "id": "serde 1.0.229",
+            "target": "serde"
+          },
+          {
+            "id": "tokio 1.53.2",
+            "target": "tokio"
+          }
+        ],
+        "edition": "2024"
+      },
+      "library_target_name": "example_tokio",
+      "license": "Apache-2.0",
+      "license_ids": [
+        "Apache-2.0"
+      ],
+      "name": "example-tokio",
+      "package_url": "https://github.com/sonalect/serde_markdown",
+      "repository": null,
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "example_tokio",
+            "crate_root": "src/lib.rs"
           }
         }
       ],
@@ -1557,6 +1590,35 @@
         }
       ],
       "version": "1.21.4"
+    },
+    "pin-project-lite 0.2.17": {
+      "common_attrs": {
+        "edition": "2018"
+      },
+      "library_target_name": "pin_project_lite",
+      "license": "Apache-2.0 OR MIT",
+      "license_file": "LICENSE-APACHE",
+      "license_ids": [
+        "Apache-2.0",
+        "MIT"
+      ],
+      "name": "pin-project-lite",
+      "package_url": "https://github.com/taiki-e/pin-project-lite",
+      "repository": {
+        "Http": {
+          "sha256": "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd",
+          "url": "https://static.crates.io/crates/pin-project-lite/0.2.17/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "pin_project_lite",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "0.2.17"
     },
     "portable-atomic 1.15.0": {
       "build_script_attrs": {},
@@ -2320,6 +2382,7 @@
           "default",
           "derive",
           "json",
+          "tokio",
           "toml",
           "yaml"
         ],
@@ -2347,6 +2410,10 @@
           {
             "id": "serde_json 1.0.151",
             "target": "serde_json"
+          },
+          {
+            "id": "tokio 1.53.2",
+            "target": "tokio"
           },
           {
             "id": "toml 1.1.6+spec-1.1.0",
@@ -2839,6 +2906,51 @@
       ],
       "version": "2.0.20"
     },
+    "tokio 1.53.2": {
+      "common_attrs": {
+        "crate_features": [
+          "bytes",
+          "fs",
+          "io-util",
+          "rt",
+          "rt-multi-thread"
+        ],
+        "deps": [
+          {
+            "id": "bytes 1.12.1",
+            "target": "bytes"
+          },
+          {
+            "id": "pin-project-lite 0.2.17",
+            "target": "pin_project_lite"
+          }
+        ],
+        "edition": "2021"
+      },
+      "library_target_name": "tokio",
+      "license": "MIT",
+      "license_file": "LICENSE",
+      "license_ids": [
+        "MIT"
+      ],
+      "name": "tokio",
+      "package_url": "https://github.com/tokio-rs/tokio",
+      "repository": {
+        "Http": {
+          "sha256": "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044",
+          "url": "https://static.crates.io/crates/tokio/1.53.2/download"
+        }
+      },
+      "targets": [
+        {
+          "Library": {
+            "crate_name": "tokio",
+            "crate_root": "src/lib.rs"
+          }
+        }
+      ],
+      "version": "1.53.2"
+    },
     "toml 1.1.6+spec-1.1.0": {
       "common_attrs": {
         "crate_features": [
@@ -3309,6 +3421,7 @@
     "serde 1.0.229",
     "serde_json 1.0.151",
     "syn 3.0.6",
+    "tokio 1.53.2",
     "toml 1.1.6+spec-1.1.0",
     "yaml_serde 0.10.7"
   ],
@@ -3316,6 +3429,7 @@
   "workspace_members": {
     "example-page 0.3.1": "rust/examples/page",
     "example-protobuf 0.3.1": "rust/examples/protobuf",
+    "example-tokio 0.3.1": "rust/examples/tokio",
     "serde_markdown 0.3.1": "rust/markdown",
     "serde_markdown-proto 0.3.1": "rust/proto",
     "serde_markdown_derive 0.3.1": "rust/markdown_derive"

@@ -1,0 +1,17 @@
+[package]
+name = "example-tokio"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+description = "A hand-written Page written and read through the async form of serde_markdown on a tokio runtime"
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_markdown = { workspace = true, features = ["tokio"] }
+tokio = { workspace = true, features = ["fs", "io-util", "rt-multi-thread"] }
+
+[lints]
+workspace = true

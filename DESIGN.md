@@ -603,6 +603,27 @@ pub const PROTO_INCLUDE: &str = /* CARGO_MANIFEST_DIR/proto */;
 
 `from_str` / `from_slice` / `from_reader` require `DeserializeOwned` because the mapping layer owns a JSON IR; they do not borrow from the input. Feature `buffa` exports `serde_markdown::buffa::annotate_markdown_body`.
 
+### Async form (feature `tokio`)
+
+Feature `tokio` (off by default) adds the module `serde_markdown::tokio`: the async twin of every function above, under the same name, writing and reading the same document with the same failures. `to_writer` and `from_reader` take tokio's `AsyncWrite` / `AsyncRead` and await the I/O; `to_writer` does not flush, like its twin.
+
+```rust
+pub async fn to_string<T: Serialize + Markdown>(value: &T) -> Result<String, Error>;
+pub async fn from_str<T: DeserializeOwned + Markdown>(s: &str) -> Result<T, Error>;
+pub async fn to_writer<W, T>(writer: W, value: &T) -> Result<(), Error>
+where
+    W: tokio::io::AsyncWrite + Unpin,
+    T: Serialize + Markdown;
+// … and to_string_with_format, to_string_with, to_vec, from_slice, from_reader
+```
+
+The async form is native, not the sync form on another thread. Writing and reading are each one algorithm cut into steps (`src/drive.rs`): the sync functions run the steps to the end; the async functions run the same steps and call `tokio::task::consume_budget` between them, which yields to the scheduler only when the task's cooperative budget is spent. No thread is spawned and nothing runs on the blocking pool, so a caller awaits these functions as they are.
+
+- Writing: serialize the value's body fields; encode the fields block; check each body section (one step per section); assemble the document.
+- Reading: split the document; decode the fields block; deserialize the value.
+
+A value's own `Serialize` or `Deserialize`, a YAML / JSON / TOML codec call, and the `pulldown-cmark` pass over a document are one step each; a structured body section is decoded inside the deserialize step. A future borrows the value it writes, so it is `Send` when the value is `Sync`.
+
 ### 5.1 Crate layout and features
 
 ```text
@@ -615,7 +636,7 @@ rust/markdown/proto/markdown/options.proto  # public (markdown.body) option, shi
 rust/markdown/testdata/markdown/          # golden documents
 rust/markdown/src/testdata/               # hand-written structs + values
 rust/markdown_derive/                     # #[derive(Markdown)]
-rust/examples/                            # runnable page + protobuf binaries
+rust/examples/                            # runnable page, protobuf, and tokio (async) binaries
 rust/examples/protobuf/proto/             # example Page; that crate's build.rs + buffa_build
 ```
 
@@ -627,6 +648,7 @@ json = []
 toml = ["dep:toml"]
 derive = ["dep:serde_markdown_derive"]
 buffa = ["dep:buffa", "dep:buffa-types", "dep:buffa-descriptor"]
+tokio = ["dep:tokio"]
 ```
 
 Feature `buffa` is **off-default**. Bazel CI still enables it. `annotate_markdown_body` is public (not `doc(hidden)`).
@@ -699,13 +721,15 @@ src/lib.rs
 src/error.rs      // handwritten Error / ErrorKind; no thiserror
 src/parse.rs      // pulldown-cmark split
 src/format.rs     // Format enum, dump/load IR
-src/ser.rs
-src/de.rs
+src/ser.rs        // WriteDoc: the write, in steps
+src/de.rs         // ReadDoc: the read, in steps
+src/drive.rs      // Steps; run (sync) and run_async (consume_budget between steps)
+src/tokio.rs      // cfg(feature = "tokio") async twins of the functions
 src/markdown.rs   // Markdown trait
 src/buffa.rs      // cfg(feature = "buffa") annotate helper
 ```
 
-under `rust/serde_markdown/`.
+under `rust/markdown/`.
 
 ## 6.5 Bazel and Buf
 

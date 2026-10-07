@@ -11,6 +11,11 @@
 //! Documents are UTF-8: [`from_slice`] fails with [`ErrorKind::Syntax`] on
 //! invalid bytes. The mapping document path is [`DESIGN`].
 //!
+//! Feature `tokio` (off by default) adds [`tokio`](mod@crate::tokio): the
+//! async twin of every function here, under the same name. It runs the same
+//! algorithm in steps and yields to the scheduler between them when the
+//! task's cooperative budget is spent; no thread is spawned.
+//!
 //! Google well-known types in the fence or body use that field type's proto3
 //! JSON serde. This crate does not parse RFC 3339 itself. Callers who pack
 //! protobuf `Any` must install a type registry (`buffa_types::register_wkt_types`)
@@ -64,11 +69,15 @@ pub mod buffa;
 extern crate self as serde_markdown;
 
 mod de;
+mod drive;
 mod error;
 mod format;
 mod markdown;
 mod parse;
 mod ser;
+
+#[cfg(feature = "tokio")]
+pub mod tokio;
 
 pub use de::{from_reader, from_slice, from_str};
 pub use error::{Error, ErrorKind};

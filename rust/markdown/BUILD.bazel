@@ -22,6 +22,7 @@ rust_library(
         "buffa",
         "derive",
         "json",
+        "tokio",
         "toml",
         "yaml",
     ],
@@ -37,6 +38,7 @@ rust_library(
         "@serde_markdown_cargo//:pulldown-cmark",
         "@serde_markdown_cargo//:serde",
         "@serde_markdown_cargo//:serde_json",
+        "@serde_markdown_cargo//:tokio",
         "@serde_markdown_cargo//:toml",
         "@serde_markdown_cargo//:yaml_serde",
     ],
@@ -53,6 +55,7 @@ rust_test(
         "buffa",
         "derive",
         "json",
+        "tokio",
         "toml",
         "yaml",
     ],
@@ -76,8 +79,13 @@ rust_doc_test(
         "buffa",
         "derive",
         "json",
+        "tokio",
         "toml",
         "yaml",
+    ],
+    deps = [
+        "@serde_markdown_cargo//:serde",
+        "@serde_markdown_cargo//:tokio",
     ],
 )
 

@@ -42,6 +42,18 @@ Also `to_vec` / `to_writer`. Feature `buffa` (off-default) adds
 | `toml` | yes | TOML fence dump/load |
 | `derive` | yes | `#[derive(Markdown)]` |
 | `buffa` | no | `annotate_markdown_body` |
+| `tokio` | no | `serde_markdown::tokio`: async twins of the functions |
+
+With feature `tokio`, every function has an async twin under the same name in
+`serde_markdown::tokio`; `to_writer` / `from_reader` take tokio's `AsyncWrite`
+/ `AsyncRead`. The async form is native: it runs the same steps as the sync
+form and yields between them when the task's cooperative budget is spent, so
+it needs no `spawn_blocking`.
+
+```rust
+let md = serde_markdown::tokio::to_string(&page).await?;
+let back: Page = serde_markdown::tokio::from_str(&md).await?;
+```
 
 ## Layout
 
@@ -56,20 +68,25 @@ Also `to_vec` / `to_writer`. Feature `buffa` (off-default) adds
 | [`rust/markdown_derive`](rust/markdown_derive) | `#[derive(Markdown)]` |
 | [`proto/markdown/testdata`](proto/markdown/testdata) | Fixture messages (not public API) |
 | [`rust/proto`](rust/proto) | Buffa stubs of the fixtures |
-| [`rust/examples`](rust/examples) | Runnable `example-page` and `example-protobuf` |
+| [`rust/examples`](rust/examples) | Runnable `example-page`, `example-protobuf`, and `example-tokio` (async form) |
 | [`MODULE.bazel`](MODULE.bazel) | Bazel module: Rust, Buf, linters |
 
 ## Examples
 
-Both binaries print the same fenced YAML document and check
-`from_str(to_string(x)) == x`:
+`example-page` and `example-protobuf` print the same fenced YAML document and
+check `from_str(to_string(x)) == x`. `example-tokio` uses the async form
+(feature `tokio`) on a tokio runtime: it prints a document, saves it to a file
+with `to_writer` and loads it back with `from_reader` over `tokio::fs`, and
+renders several pages in parallel tasks.
 
 ```bash
 cargo run -p example-page
 cargo run -p example-protobuf   # needs protoc (`PROTOC` or PATH)
+cargo run -p example-tokio
 
 bazel run //rust/examples/page
 bazel run //rust/examples/protobuf
+bazel run //rust/examples/tokio
 ```
 
 ## Proto option

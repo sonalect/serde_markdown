@@ -39,6 +39,31 @@ proto/markdown/options.proto
 rust/markdown/proto/markdown/options.proto
 ```
 
+## Async form, native
+
+Callers are async from top to bottom. Feature `tokio` (off by default,
+owner, 7 October 2026) gives every public function an async twin under the
+same name in `serde_markdown::tokio`. The twin is native, never the sync
+function moved to the blocking pool: writing and reading are each one
+algorithm written as a `Steps` job (`src/drive.rs`). The sync function runs
+the steps; the async one runs the same steps and calls
+`tokio::task::consume_budget().await` between them. A new public function
+gets its twin in the same change, and new work goes into steps, not into a
+second copy of the algorithm.
+
+```text
+# BAD — the async twin is the sync function on the blocking pool
+pub async fn to_string<T>(value: &T) -> Result<String, Error> {
+    let value = value.clone();
+    spawn_blocking(move || crate::to_string(&value)).await?
+}
+
+# GOOD — the same job, a yield point between its steps
+pub async fn to_string<T>(value: &T) -> Result<String, Error> {
+    drive::run_async(WriteDoc::new(value, Format::Yaml, FieldsLayout::Fenced)).await
+}
+```
+
 ## Call direction
 
 The library knows nothing of its caller. It never names Knowqore's crates,

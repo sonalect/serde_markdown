@@ -28,6 +28,7 @@ say so and ask the owner to switch (`/model opus`) before starting.
 8. **Errors** — `Result` in `src/` (no `panic!` / `unwrap` / `expect` / `assert!`); the kind or code not replaced by a message.
 9. **Untrusted input** — Markdown, YAML/JSON/TOML fields and fences: no panic, no unbounded work on junk input.
 10. **Consumers** — everything a consumer needs at build time sits inside the crate (`component.md`); each feature set builds and tests.
+11. **Async form** — every public function has its twin in `serde_markdown::tokio`; the twin runs the same steps with a yield between them, never blocks a runtime worker or hops threads.
 
 Skip an item only when that surface is absent; say so. Do not pad the plan
 with cosmetic nits.

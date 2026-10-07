@@ -71,6 +71,7 @@ not use it yet; wiring is M5.
 | [M13](#m13-documents-once) | done | DESIGN, README, CHANGELOG, this dashboard |
 | [M14](#m14-acceptance) | done | Golden round-trips; `bazel test //...` |
 | [M15](#m15-runnable-examples) | in progress | `rust/examples` binaries a caller can run |
+| [M16](#m16-async-form) | in progress | `serde_markdown::tokio`: native async twins (feature `tokio`) |
 
 ---
 
@@ -548,6 +549,42 @@ embed those programs in this file. Mapping is unchanged.
       reviewed.
 
 **Review:** runnable examples. Stop.
+
+---
+
+## M16. Async form
+
+**Status:** in progress
+
+**Codes:** DESIGN.md §5 (Async form), §6.4.
+
+Callers that are async from top to bottom call the library without a
+`spawn_blocking`. Mapping is unchanged; the async form writes and reads the
+same documents.
+
+- [x] Writing and reading are one algorithm in steps (`WriteDoc`,
+      `ReadDoc`, `src/drive.rs`); the sync functions run them with no yield
+      point. Proof: the existing round-trip and golden tests, unchanged.
+- [x] Feature `tokio` (off by default) adds `serde_markdown::tokio` with an
+      async twin of every function, under the same name. Proof:
+      `tokio::tests::every_writer_gives_the_sync_document`,
+      `every_reader_gives_the_sync_value`,
+      `the_async_form_fails_as_the_sync_form_does`, `an_io_failure_is_io`.
+- [x] Native: `consume_budget` between steps, no thread, no blocking pool.
+      Proof: `drive::tests::with_tokio::a_long_job_lets_another_task_run_on_a_single_thread`,
+      `the_async_driver_gives_the_sync_result_and_does_not_yield_outside_a_runtime`,
+      `tokio::tests::no_call_needs_a_thread_or_a_runtime` (also checks the
+      futures are `Send`).
+- [x] `rust/examples/tokio`: a hand-written `Page` through the async form
+      on a tokio runtime — `to_string` / `from_str`, a file round-trip with
+      `to_writer` / `from_reader` over `tokio::fs`, and pages rendered in
+      parallel tasks on a multi-thread runtime. `cargo run -p
+      example-tokio` and `bazel run //rust/examples/tokio`. Proof:
+      `//rust/examples/tokio:lib_test`.
+- [ ] `bazel test //...` green (the library targets build with `tokio`).
+      Owner has reviewed.
+
+**Review:** async form. Stop.
 
 ---
 

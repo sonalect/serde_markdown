@@ -19,8 +19,9 @@ plugins' output. Never edit a generated file by hand.
 
 ## Fast loop and gate
 
-- `cargo test --workspace` and
+- `cargo test --workspace --all-features` and
   `cargo clippy --workspace --all-targets --all-features`: the fast loop.
+  Without `--all-features` the async form (feature `tokio`) is not tested.
   `example-protobuf` compiles its proto in `build.rs` and needs `protoc`
   on `PATH` or in `PROTOC`.
 - `bazel test //... --keep_going --test_output=errors`: the gate before a

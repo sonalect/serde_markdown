@@ -8,6 +8,20 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+### Added
+
+- Feature `tokio` (off by default) adds `serde_markdown::tokio`, the async
+  twin of every function under the same name: `to_string`,
+  `to_string_with_format`, `to_string_with`, `to_vec`, `to_writer` (tokio
+  `AsyncWrite`), `from_str`, `from_slice`, `from_reader` (tokio
+  `AsyncRead`). It writes and reads the same documents as the sync form. It
+  is native: the same steps, with a cooperative yield between them when the
+  task's budget is spent; no thread and no `spawn_blocking`, so an async
+  caller awaits it as it is.
+- The runnable example `example-tokio` (`rust/examples/tokio`): the async
+  form on a tokio runtime, with a file round-trip over `tokio::fs` and
+  pages rendered in parallel tasks.
+
 ### Changed
 
 - `markdown/options.proto`, the `(markdown.body)` option, moved into the crate:

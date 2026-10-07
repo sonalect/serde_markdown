@@ -1,12 +1,14 @@
 //! Deserialize a `Markdown` root struct from a document.
 
 use std::io::Read;
+use std::marker::PhantomData;
 use std::vec;
 
 use serde::de::value::{StrDeserializer, StringDeserializer};
 use serde::de::{DeserializeOwned, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Value};
 
+use crate::drive::{self, Steps};
 use crate::error::{Error, ErrorKind};
 use crate::format::{self, Format};
 use crate::markdown::Markdown;
@@ -60,21 +62,72 @@ pub fn from_str<T>(s: &str) -> Result<T, Error>
 where
     T: DeserializeOwned + Markdown,
 {
-    let decoded = decode_document(parse::parse(s, T::BODY_FIELDS.len())?)?;
-    if decoded.body.len() > T::BODY_FIELDS.len() {
-        return Err(Error::body(format!(
-            "expected at most {} body section(s), found {}",
-            T::BODY_FIELDS.len(),
-            decoded.body.len()
-        )));
+    drive::run(ReadDoc::new(s))
+}
+
+/// Reading a document, one step at a time: split it into the fields slice
+/// and body sections, decode the fields block, and deserialize the value.
+/// The value's own `Deserialize` runs as one step, so a structured body
+/// section is decoded within it.
+pub(crate) struct ReadDoc<'a, T> {
+    input: &'a str,
+    body_fields: &'static [&'static str],
+    stage: ReadStage,
+    value: PhantomData<fn() -> T>,
+}
+
+enum ReadStage {
+    Split,
+    Decode(Document),
+    Deserialize(Decoded),
+    Done,
+}
+
+impl<'a, T: DeserializeOwned + Markdown> ReadDoc<'a, T> {
+    /// The job that reads a `T` from `input`.
+    pub(crate) fn new(input: &'a str) -> Self {
+        Self {
+            input,
+            body_fields: T::BODY_FIELDS,
+            stage: ReadStage::Split,
+            value: PhantomData,
+        }
     }
-    let slots = section_slots(T::BODY_FIELDS.len(), &decoded.body);
-    serde::de::Deserialize::deserialize(RootDe {
-        fields: decoded.fields,
-        body_fields: T::BODY_FIELDS,
-        slots,
-        format: decoded.format,
-    })
+}
+
+impl<T: DeserializeOwned> Steps for ReadDoc<'_, T> {
+    type Output = T;
+
+    fn step(&mut self) -> Result<Option<T>, Error> {
+        let count = self.body_fields.len();
+        match std::mem::replace(&mut self.stage, ReadStage::Done) {
+            ReadStage::Split => {
+                self.stage = ReadStage::Decode(parse::parse(self.input, count)?);
+            }
+            ReadStage::Decode(doc) => {
+                let decoded = decode_document(doc)?;
+                if decoded.body.len() > count {
+                    return Err(Error::body(format!(
+                        "expected at most {count} body section(s), found {}",
+                        decoded.body.len()
+                    )));
+                }
+                self.stage = ReadStage::Deserialize(decoded);
+            }
+            ReadStage::Deserialize(decoded) => {
+                let slots = section_slots(count, &decoded.body);
+                return serde::de::Deserialize::deserialize(RootDe {
+                    fields: decoded.fields,
+                    body_fields: self.body_fields,
+                    slots,
+                    format: decoded.format,
+                })
+                .map(Some);
+            }
+            ReadStage::Done => unreachable!("a finished job is not stepped again"),
+        }
+        Ok(None)
+    }
 }
 
 /// Deserialize a Markdown document from UTF-8 `bytes`.

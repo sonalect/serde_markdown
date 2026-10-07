@@ -1,0 +1,35 @@
+load("@rules_rust//rust:defs.bzl", "rust_binary", "rust_library", "rust_test")
+
+exports_files(["Cargo.toml"])
+
+rust_library(
+    name = "lib",
+    srcs = ["src/lib.rs"],
+    crate_name = "example_tokio",
+    proc_macro_deps = [
+        "//rust/markdown_derive:serde_markdown_derive",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//rust/markdown:serde_markdown",
+        "@serde_markdown_cargo//:serde",
+        "@serde_markdown_cargo//:tokio",
+    ],
+)
+
+rust_binary(
+    name = "tokio",
+    srcs = ["src/main.rs"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":lib",
+        "//rust/markdown:serde_markdown",
+        "@serde_markdown_cargo//:tokio",
+    ],
+)
+
+rust_test(
+    name = "lib_test",
+    crate = ":lib",
+    visibility = ["//rust:__pkg__"],
+)

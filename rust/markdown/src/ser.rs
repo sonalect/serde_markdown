@@ -8,6 +8,7 @@ use std::io::Write;
 use serde::ser::{Impossible, Serialize, SerializeSeq, SerializeStruct, Serializer};
 use serde_json::Value;
 
+use crate::drive::{self, Steps};
 use crate::error::Error;
 use crate::format::{self, FieldsLayout, Format};
 use crate::markdown::Markdown;
@@ -72,21 +73,110 @@ pub fn to_string_with<T: Serialize + Markdown>(
     format: Format,
     layout: FieldsLayout,
 ) -> Result<String, Error> {
-    let captured = value.serialize(RootSerializer {
-        body_fields: T::BODY_FIELDS,
-        format,
-    })?;
-    let front = if captured.front_len > 0 {
-        let front = FrontMatter {
+    drive::run(WriteDoc::new(value, format, layout))
+}
+
+/// Writing a document, one step at a time: capture the body fields of the
+/// value, encode the fields block, turn each body field into its section
+/// (one step per field), and assemble the document.
+pub(crate) struct WriteDoc<'a, T: ?Sized> {
+    value: &'a T,
+    body_fields: &'static [&'static str],
+    format: Format,
+    layout: FieldsLayout,
+    stage: Stage,
+}
+
+enum Stage {
+    Capture,
+    Front(Captured),
+    Sections {
+        front: Option<String>,
+        slots: std::vec::IntoIter<BodyValue>,
+        texts: Vec<String>,
+    },
+    Assemble {
+        front: Option<String>,
+        texts: Vec<String>,
+    },
+    Done,
+}
+
+impl<'a, T: Serialize + Markdown> WriteDoc<'a, T> {
+    /// The job that writes `value` in `format` and `layout`.
+    pub(crate) fn new(value: &'a T, format: Format, layout: FieldsLayout) -> Self {
+        Self {
             value,
             body_fields: T::BODY_FIELDS,
-            len: captured.front_len,
-        };
-        Some(format::dump(&front, format)?)
-    } else {
-        None
-    };
-    render(front, captured.body, T::BODY_FIELDS, format, layout)
+            format,
+            layout,
+            stage: Stage::Capture,
+        }
+    }
+}
+
+impl<T: Serialize + ?Sized> Steps for WriteDoc<'_, T> {
+    type Output = String;
+
+    fn step(&mut self) -> Result<Option<String>, Error> {
+        match std::mem::replace(&mut self.stage, Stage::Done) {
+            Stage::Capture => {
+                let captured = self.value.serialize(RootSerializer {
+                    body_fields: self.body_fields,
+                    format: self.format,
+                })?;
+                self.stage = Stage::Front(captured);
+            }
+            Stage::Front(captured) => {
+                let front = if captured.front_len > 0 {
+                    let front = FrontMatter {
+                        value: self.value,
+                        body_fields: self.body_fields,
+                        len: captured.front_len,
+                    };
+                    Some(format::dump(&front, self.format)?)
+                } else {
+                    None
+                };
+                let slots = slots(captured.body, self.body_fields);
+                self.stage = Stage::Sections {
+                    front,
+                    texts: Vec::with_capacity(slots.len()),
+                    slots: slots.into_iter(),
+                };
+            }
+            Stage::Sections {
+                front,
+                mut slots,
+                mut texts,
+            } => {
+                self.stage = match slots.next() {
+                    Some(slot) => {
+                        let last = texts.len() + 1 == self.body_fields.len();
+                        texts.push(section_text(slot, last)?);
+                        Stage::Sections {
+                            front,
+                            slots,
+                            texts,
+                        }
+                    }
+                    None => Stage::Assemble { front, texts },
+                };
+            }
+            Stage::Assemble { front, texts } => {
+                return render(
+                    front,
+                    texts,
+                    self.body_fields.len(),
+                    self.format,
+                    self.layout,
+                )
+                .map(Some);
+            }
+            Stage::Done => unreachable!("a finished job is not stepped again"),
+        }
+        Ok(None)
+    }
 }
 
 /// Serialize `value` as UTF-8 bytes of a fenced YAML Markdown document.
@@ -534,20 +624,10 @@ impl<S: Serializer> Serializer for FrontOnly<S> {
     }
 }
 
-/// Assemble the document.
-///
-/// `front` is the encoded fields block, if any. Body text is written as is.
-/// The separator between two body sections is `\n---\n`; the line break of
-/// the closing fence (or of the bare fields' last line) also ends an empty
-/// first section.
-fn render(
-    front: Option<String>,
-    mut body: HashMap<String, BodyValue>,
-    body_fields: &'static [&'static str],
-    format: Format,
-    layout: FieldsLayout,
-) -> Result<String, Error> {
-    let count = body_fields.len();
+/// The value of each body field, in declaration order, with the trailing
+/// absent ones left out: the last body field has no separator, so it reads
+/// back as absent.
+fn slots(mut body: HashMap<String, BodyValue>, body_fields: &[&str]) -> Vec<BodyValue> {
     let mut slots: Vec<BodyValue> = body_fields
         .iter()
         .map(|name| body.remove(*name).unwrap_or(BodyValue::Null))
@@ -556,12 +636,23 @@ fn render(
         .pop_if(|slot| matches!(slot, BodyValue::Null))
         .is_some()
     {}
+    slots
+}
 
-    let mut texts = Vec::with_capacity(slots.len());
-    for (i, slot) in slots.into_iter().enumerate() {
-        texts.push(section_text(slot, i + 1 == count)?);
-    }
-
+/// Assemble the document from the encoded fields block and the section
+/// texts of `count` declared body fields.
+///
+/// `front` is the encoded fields block, if any. Body text is written as is.
+/// The separator between two body sections is `\n---\n`; the line break of
+/// the closing fence (or of the bare fields' last line) also ends an empty
+/// first section.
+fn render(
+    front: Option<String>,
+    texts: Vec<String>,
+    count: usize,
+    format: Format,
+    layout: FieldsLayout,
+) -> Result<String, Error> {
     // After a fence or a bare mapping the document already ends in a line
     // break, which serves as the break that ends an empty first section.
     let after_fields = front.is_some();

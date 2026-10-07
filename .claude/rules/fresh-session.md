@@ -54,7 +54,7 @@ model choice in `delegation.md`; both spend the same usage limits.
 | `low` | lookups, running a command, a one-line edit, a factual answer |
 | `medium` | routine change in known code, docs pass, mechanical edits, small tests |
 | `high` | multi-file feature, debugging with an unknown cause, proto/API change |
-| `xhigh` | design, plan, full review, concurrency, a change to the public API or to the bytes a document is written as |
+| `xhigh` | design, plan, full review, concurrency or the async form, a change to the public API or to the bytes a document is written as |
 | `max` | stuck after `xhigh`, or a subtle bug that two attempts did not fix |
 
 Suggest **up** when the second attempt at the same fix failed, when the
