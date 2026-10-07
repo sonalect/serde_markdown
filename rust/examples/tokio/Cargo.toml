@@ -9,8 +9,8 @@ publish = false
 description = "A hand-written Page written and read through the async form of serde_markdown on a tokio runtime"
 
 [dependencies]
-serde = { workspace = true, features = ["derive"] }
 serde_markdown = { workspace = true, features = ["tokio"] }
+serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["fs", "io-util", "rt-multi-thread"] }
 
 [lints]

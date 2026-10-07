@@ -18,6 +18,8 @@ struct Inner {
     offset: Option<usize>,
     message: Box<str>,
     source: Option<Box<dyn StdError + Send + Sync + 'static>>,
+    /// The field a Serde `missing_field` error names.
+    missing_field: Option<&'static str>,
 }
 
 /// Classification for [`Error`]. Match this; do not parse [`Display`].
@@ -43,6 +45,12 @@ impl Error {
     /// Classification for this failure. Match this; do not parse [`Display`].
     pub fn kind(&self) -> ErrorKind {
         self.inner.kind
+    }
+
+    /// The field a Serde `missing_field` error names, so the reader can tell
+    /// a missing body section from a missing front-matter key.
+    pub(crate) fn missing_field(&self) -> Option<&'static str> {
+        self.inner.missing_field
     }
 
     /// Byte offset into the input. [`Some`] only for [`ErrorKind::Syntax`].
@@ -131,6 +139,7 @@ impl Error {
                 offset,
                 message: message.to_string().into_boxed_str(),
                 source,
+                missing_field: None,
             }),
         }
     }
@@ -176,6 +185,12 @@ impl ser::Error for Error {
 impl de::Error for Error {
     fn custom<T: fmt::Display>(msg: T) -> Self {
         Self::type_error(msg)
+    }
+
+    fn missing_field(field: &'static str) -> Self {
+        let mut err = Self::type_error(format_args!("missing field `{field}`"));
+        err.inner.missing_field = Some(field);
+        err
     }
 }
 

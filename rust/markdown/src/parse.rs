@@ -125,6 +125,15 @@ fn load_bare_mapping(inner: &str, sniff: Sniff) -> Result<Option<Map<String, Val
     let format = sniff.format();
     let value = match format::load(inner, format) {
         Ok(value) => value,
+        // Without the YAML decoder, a slice sniffed as YAML is fields only
+        // when it looks like a YAML mapping; prose is the body.
+        Err(err)
+            if err.kind() == ErrorKind::FormatDisabled
+                && sniff == Sniff::Yaml
+                && !looks_like_yaml_mapping(inner) =>
+        {
+            return Ok(None);
+        }
         Err(err) if err.kind() == ErrorKind::FormatDisabled => return Err(err),
         Err(err) if matches!(format, Format::Json | Format::Toml) => return Err(err),
         Err(_) => return Ok(None),
@@ -134,6 +143,26 @@ fn load_bare_mapping(inner: &str, sniff: Sniff) -> Result<Option<Map<String, Val
         Value::Null => Some(Map::new()),
         _ => None,
     })
+}
+
+/// Whether the first significant line of `text` (blank lines and `#`
+/// comments skipped) is a YAML mapping key: `key:` at the end of the line or
+/// before a space, or an explicit `? key`.
+fn looks_like_yaml_mapping(text: &str) -> bool {
+    let Some(line) = text
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with('#'))
+    else {
+        return false;
+    };
+    if line.starts_with("? ") {
+        return true;
+    }
+    match line.split_once(':') {
+        Some((key, rest)) => !key.is_empty() && (rest.is_empty() || rest.starts_with([' ', '\t'])),
+        None => false,
+    }
 }
 
 /// Whether a reader would take the start of `candidate` for a fields block
@@ -419,18 +448,26 @@ fn skip_ws(input: &str, mut pos: usize) -> usize {
     pos
 }
 
+/// Where the content starts after the leading whitespace and top-level dash
+/// rules. `dash_rules` are in document order, so one pass over them is
+/// enough: a rule that ends before the current position can no longer
+/// match.
 fn skip_prefix(input: &str, dash_rules: &[Range<usize>]) -> usize {
     let mut pos = 0;
+    let mut rules = dash_rules.iter().peekable();
     loop {
         pos = skip_ws(input, pos);
-        let Some(rule) = dash_rules.iter().find(|range| {
-            range.start == pos
-                || (range.start <= pos && pos < range.end)
-                || skip_ws(input, range.start) == pos
-        }) else {
-            return pos;
-        };
-        pos = rule.end;
+        while rules
+            .next_if(|rule| rule.end <= pos && rule.start != pos)
+            .is_some()
+        {}
+        match rules.peek() {
+            Some(rule) if rule.start <= pos && (pos < rule.end || rule.start == pos) => {
+                pos = rule.end;
+                rules.next();
+            }
+            _ => return pos,
+        }
     }
 }
 
@@ -692,6 +729,7 @@ mod tests {
         }
     }
 
+    #[cfg(any(feature = "yaml", feature = "json", feature = "toml"))]
     fn bare(doc: &Document) -> (Sniff, &str) {
         match &doc.fields {
             Fields::Bare { sniff, inner, .. } => (*sniff, inner.as_str()),
@@ -1028,5 +1066,23 @@ Body text.\n";
             doc.body[0]
         );
         assert_eq!(doc.body[1].trim(), "section two");
+    }
+
+    /// Leading `---` lines are skipped in one pass: a document of nothing
+    /// but them must not take quadratic time.
+    #[test]
+    fn many_leading_rules_are_skipped_in_linear_time() {
+        let input = "---\n".repeat(50_000);
+        let start = std::time::Instant::now();
+        let _ = parse(&input, 2);
+        let elapsed = start.elapsed();
+        assert!(
+            elapsed < std::time::Duration::from_secs(10),
+            "50 000 leading rules took {elapsed:?}"
+        );
+        let doc = parse_ok("---\n---\n\n```yaml\nk: 1\n```\na\n---\nb");
+        let (labeled, _, _) = fenced(&doc);
+        assert_eq!(*labeled, Some(Sniff::Yaml));
+        assert_eq!(doc.body, ["a", "b"]);
     }
 }

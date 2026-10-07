@@ -239,3 +239,40 @@ rust_test(
         "@serde_markdown_cargo//:serde_json",
     ],
 )
+
+# Same sources with no feature at all, so a build without any fence language
+# (and the tests without `derive`) keeps compiling.
+rust_library(
+    name = "serde_markdown_minimal",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = glob(
+        ["testdata/markdown/**/*.md"],
+        allow_empty = True,
+    ),
+    crate_name = "serde_markdown",
+    visibility = ["//rust:__pkg__"],
+    deps = [
+        "@serde_markdown_cargo//:pulldown-cmark",
+        "@serde_markdown_cargo//:serde",
+        "@serde_markdown_cargo//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "serde_markdown_minimal_test",
+    compile_data = glob(
+        ["testdata/markdown/**/*.md"],
+        allow_empty = True,
+    ),
+    crate = ":serde_markdown_minimal",
+    proc_macro_deps = [
+        "//rust/markdown_derive:serde_markdown_derive",
+    ],
+    visibility = ["//rust:__pkg__"],
+    deps = [
+        "//rust/proto",
+        "@serde_markdown_cargo//:buffa",
+        "@serde_markdown_cargo//:buffa-types",
+        "@serde_markdown_cargo//:serde_json",
+    ],
+)

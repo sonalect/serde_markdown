@@ -115,6 +115,12 @@ is an error (the author clearly wrote that syntax).
 If the first slice is a mapping and there is no later `---`, the file is
 fields-only (body fields follow §4.4).
 
+A build without the `yaml` feature cannot decode a slice sniffed as YAML. It
+takes such a slice for fields only when its first significant line is a YAML
+mapping key (`key:` or `? key`), and fails with `ErrorKind::FormatDisabled`;
+any other slice, prose included, is the body. The writer applies the same
+rule, so a body-only document gets no empty fields block.
+
 On serialize, `to_string` still writes a **fenced** ` ```yaml ` block (no
 ambiguity with Markdown). Emit this bare shape with `FieldsLayout::Bare`.
 
@@ -321,7 +327,7 @@ struct Page {
 }
 ```
 
-`#[markdown(body)]` is our attribute, consumed by `#[derive(Markdown)]`. It is **not** Serde’s `#[serde(tag = "...")]` (that is internally tagged enums). Serde attributes on the same field still apply (`rename`, `default`, `skip_serializing_if`, …). Body membership uses the **Serde field name** (after `rename`).
+`#[markdown(body)]` is our attribute, consumed by `#[derive(Markdown)]`. It is **not** Serde’s `#[serde(tag = "...")]` (that is internally tagged enums). Serde attributes on the same field still apply (`rename`, `default`, `skip_serializing_if`, …). Body membership uses the **Serde field name**: the field's `rename`, else the struct's `rename_all` (either form) applied to the field name; a raw identifier (`r#type`) loses its `r#`. A body field whose serialize and deserialize names differ is a compile error, since the document could not be read back.
 
 The derive emits:
 
@@ -450,6 +456,8 @@ Every root field not listed in `BODY_FIELDS`. Encoding is the fence language app
 
 Unknown fence keys and missing front-matter fields: Serde / buffa defaults (`deny_unknown_fields`, `#[serde(default)]`, proto3 implicit presence, `MessageField<T>`, `Option<T>`). The Markdown layer does not add a second policy.
 
+Every fence language reads into the same intermediate value. A YAML tagged value (`!Variant content`, how `yaml_serde` writes an enum variant with content) reads as the single-key map `{Variant: content}`, the form JSON and TOML write; a TOML date-time reads as its text, so it fills a string or a `Timestamp` field.
+
 ### 4.2 Body
 
 One logical section per `BODY_FIELDS` entry, in **declaration order** of those fields (not alphabetical, not proto number). The field **name does not appear** in the Markdown.
@@ -461,7 +469,9 @@ How a section is encoded depends on what that type’s `Serialize` produces (see
 | Type | Section text |
 | --- | --- |
 | `String`, `&str`, proto `string`, `StringValue` | raw Markdown (verbatim) |
-| Rust `Vec<u8>` / `&[u8]` | raw UTF-8 Markdown (error if invalid UTF-8 on serialize) |
+| Rust `Vec<u8>` / `&[u8]` | raw UTF-8 Markdown (error if invalid UTF-8 on serialize; a `Vec<u8>` whose text reads as an empty list, such as `[]`, is refused on serialize — an empty `Vec<u8>` is written as that list) |
+| enum, unit variant | the variant's name, raw |
+| enum, variant with content | fence-format map `{Variant: content}` (YAML writes the tag `!Variant content`) |
 | proto `bytes` / `BytesValue` | proto3 JSON: **base64 text**. Prefer `string` for human Markdown |
 | scalars (`bool`, numbers) | YAML/JSON/TOML scalar in the fence’s language |
 | nested struct / proto message | YAML/JSON/TOML object |
@@ -503,7 +513,7 @@ Body sections are **positional**. Unset values in the **middle** of the body lis
 #### Deserialize
 
 1. Assign sections to body fields in order.
-2. If sections run out, remaining fields must all be optional → `None` / unset; otherwise `missing section`.
+2. If sections run out, the remaining body fields are not handed to the value, so Serde applies its own rule: `Option` → `None`, `#[serde(default)]` → the default, proto3 implicit presence → the zero value. A required one fails with `ErrorKind::Body` (`missing section`). When front-matter keys are missing too, Serde reports the first missing field in declaration order (`ErrorKind::Type` for a key).
 3. There are no extra sections: once the separators of the first `n − 1`
    fields are seen, the rest of the document is the last field, `---` lines
    included.
@@ -668,18 +678,20 @@ Markdown text
 parse.rs     pulldown-cmark → (Option<Fence>, Vec<Section>)
     │
     ▼
-de.rs        fence → yaml_serde / serde_json / toml → IR map
+de.rs        fence → yaml_serde / serde_json / toml → IR map (ir.rs)
              body field F_i ← section deserializer (raw or format)
+             body field without a section ← not handed over (Serde default)
              other fields ← IR
              T::deserialize
 
 T: Serialize + Markdown
     │
     ▼
-ser.rs       serde_json::to_value(T)   (uses T’s Serialize: proto JSON if buffa)
-             pull BODY_FIELDS out, render sections
-             remaining map → yaml_serde / serde_json / toml
-             if remaining empty → omit fence
+ser.rs       T::serialize, capturing BODY_FIELDS: each probed as absent,
+             raw text, or dumped in the fence language
+             T::serialize again, body fields skipped → yaml_serde /
+             serde_json / toml (keys in declaration order)
+             if no field is left → omit fence
              join sections with ---
 ```
 
@@ -693,24 +705,25 @@ Root must be a named struct (`serialize_struct`). Maps, sequences, tuple structs
 
 ### 6.3 Rendering a body section
 
-After `serde_json::to_value` of the whole root (or a per-field serialize):
+While the root struct is serialized, each body field's value is probed, with no tree built:
 
-| JSON value of that field | Written section |
+| What the field's `Serialize` does | Written section |
 | --- | --- |
-| missing / `Null` | absent (see §4.4) |
-| `String s` | raw `s` (no extra quotes) |
-| `Number` / `Bool` | fence-format scalar (`true`, `1`) |
-| `Object` / `Array` | fence-format dump (`yaml_serde::to_string`, pretty JSON, pretty TOML) |
-| Rust body `Vec<u8>` | UTF-8 raw, **before** JSON (otherwise it would become `[84, 101, …]`) |
+| `serialize_none` / `serialize_unit` / unit struct | absent (see §4.4) |
+| `serialize_str`, `serialize_char`, a unit enum variant | raw text (no extra quotes) |
+| `serialize_bytes` / a non-empty seq of only `u8` (`Vec<u8>`) | UTF-8 raw (otherwise it would become `[84, 101, …]`) |
+| anything else (numbers, bools, maps, structs, other seqs, variants with content) | fence-format dump (`yaml_serde::to_string`, pretty JSON, pretty TOML) |
 
-Detecting `Vec<u8>`: while capturing the root struct, if the field is in `BODY_FIELDS` and the value calls `serialize_bytes` / `serialize_byte_buf`, or is a seq of only `u8`, treat as raw UTF-8. Buffa `bytes` fields serialize as a **string** (base64) under proto JSON; they follow the `String` row unless we add a later opt-in.
+Buffa `bytes` fields serialize as a **string** (base64) under proto JSON; they follow the raw-text row unless we add a later opt-in.
 
 Deserializing a section:
 
 - `deserialize_option`: empty → `None`; else `Some` with the rest of this list.
 - `deserialize_string` / `str` / `bytes` / `byte_buf`: raw section (bytes: UTF-8).
 - `deserialize_i64` / `bool` / …: parse as fence-format scalar (body-only → YAML).
-- `deserialize_struct` / `map` / `seq` / `any`: parse the section as YAML/JSON/TOML, then deserialize.
+- `deserialize_struct` / `map` / `any`: parse the section as YAML/JSON/TOML, then deserialize.
+- `deserialize_seq`: a section that parses as a non-empty list is read by its element type, decided at the first element: `u8` takes the raw bytes of the text (a `Vec<u8>`), anything else the parsed list. A section that parses as an empty list is empty; any other section is raw bytes.
+- `deserialize_enum`: a section that is one of the variant names is that unit variant; anything else is parsed and read as a variant name or a `{Variant: content}` map.
 
 That last path is what makes **arbitrary types** and **WKT objects** work without a type switch in this crate.
 
@@ -721,6 +734,7 @@ src/lib.rs
 src/error.rs      // handwritten Error / ErrorKind; no thiserror
 src/parse.rs      // pulldown-cmark split
 src/format.rs     // Format enum, dump/load IR
+src/ir.rs         // the IR decoder: YAML tags → single-key maps, TOML date-times → text
 src/ser.rs        // WriteDoc: the write, in steps
 src/de.rs         // ReadDoc: the read, in steps
 src/drive.rs      // Steps; run (sync) and run_async (consume_budget between steps)
@@ -737,7 +751,7 @@ bzlmod, `bazel_utils_*`, hermetic Buf, buffa plugins, `write_source_files` back 
 
 | Path | Role |
 | --- | --- |
-| `MODULE.bazel` | `serde_markdown` module, `protobuf` 36.1.bcr.1, `rules_rust`, `bazel_utils_{bazel,buf,core,md,protoc,rust}` |
+| `MODULE.bazel` | `serde_markdown` module, `protobuf` 36.2, `rules_rust`, `bazel_utils_{bazel,buf,core,md,protoc,rust}` |
 | `buf.MODULE.bazel` | Buf CLI `v1.73.0`; `protoc.plugin` pins `protoc-gen-buffa` and `protoc-gen-buffa-packaging` `v0.9.2` |
 | `rust.MODULE.bazel` | Rust 1.99.0 / edition 2024, crate_universe (workspace crates only) |
 | `buf.yaml` | modules `rust/markdown/proto` (the option), `proto/` (fixtures), and `rust/examples/protobuf/proto` (LSP, lint, format) |
@@ -824,7 +838,7 @@ Exact `Display` wording lives in rustdoc. `FormatDisabled` displays as `format n
 
 ## 9. Testing plan
 
-- Golden files in `rust/serde_markdown/testdata/markdown/`: YAML / JSON / TOML fenced and **bare** (§2.4), unlabeled first fence (sniff), leading `---` / whitespace skipped, fence-after-paragraph is body, prose-then-`---` stays body-only.
+- Golden files in `rust/markdown/testdata/markdown/`: YAML / JSON / TOML fenced and **bare** (§2.4), unlabeled first fence (sniff), leading `---` / whitespace skipped, fence-after-paragraph is body, prose-then-`---` stays body-only.
 - Nested front matter: maps, seqs, bools (`nested.fenced.yaml.md`).
 - Body: Unicode, trailing spaces, internal blank lines (`whitespace.unicode.md`).
 - `---` inside a body fenced block does **not** split; `***` / `___` do **not** split; list items containing `---` do **not** split (`page.split.*`).
@@ -834,6 +848,8 @@ Exact `Display` wording lives in rustdoc. `FormatDisabled` displays as `format n
 - **WKT fixtures** (front matter and body): `Timestamp`, `Duration`, `Empty`, `Struct`, `FieldMask`, wrappers (`well_known.fenced.yaml.md`). `Any` (with registry) later.
 - Buffa-generated messages with `(markdown.body)` and proto3 `optional` (`proto/markdown/testdata/`).
 - Hand-written structs with `buffa_types::Timestamp` in the fence and `String` in the body (`src/testdata/types.rs`).
+- Enums in the fields and the body, `rename_all` and raw identifiers, `Vec<u8>` bodies that read as lists, `#[serde(default)]` body fields, TOML date-times (`src/acceptance.rs`, `review`).
+- Feature matrix: every feature set builds and tests, none at all included (Bazel `serde_markdown_minimal`).
 
 ## 10. Non-goals (v1)
 
@@ -850,7 +866,7 @@ Exact `Display` wording lives in rustdoc. `FormatDisabled` displays as `format n
 
 ## 11. Implementation order
 
-Stage order is [ROADMAP.md](ROADMAP.md) (M0–M15). This section is only that pointer. Do not treat it as a second checklist.
+Stage order is [ROADMAP.md](ROADMAP.md) (M0–M16). This section is only that pointer. Do not treat it as a second checklist.
 
 ## 12. Resolved decisions
 

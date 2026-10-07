@@ -18,6 +18,8 @@ rust_clippy_test(
         "//rust/proto",
         "//rust/proto:test",
         "//rust/markdown:serde_markdown",
+        "//rust/markdown:serde_markdown_minimal",
+        "//rust/markdown:serde_markdown_minimal_test",
         "//rust/markdown:serde_markdown_test",
         "//rust/markdown:serde_markdown_no_json",
         "//rust/markdown:serde_markdown_no_json_test",

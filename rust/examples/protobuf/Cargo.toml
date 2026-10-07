@@ -9,16 +9,16 @@ publish = false
 description = "Protobuf Page generated in-crate and serialized as Markdown"
 
 [dependencies]
+serde_markdown = { workspace = true, features = ["buffa"] }
 buffa = { workspace = true }
 buffa-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_markdown = { workspace = true, features = ["buffa"] }
 
 [build-dependencies]
+serde_markdown = { workspace = true, features = ["buffa"] }
 buffa = { workspace = true }
 buffa-build = { workspace = true }
-serde_markdown = { workspace = true, features = ["buffa"] }
 
 [lints]
 workspace = true

@@ -24,6 +24,15 @@ API changes bump the minor.
 
 ### Changed
 
+- The README is rewritten for users of the crate: how to depend on it, the
+  document shape, body fields, language and layout, errors, the async API
+  (with a file round-trip over `tokio::fs`), and protobuf messages; the
+  development notes moved to the end. Its examples are checked against the
+  crate.
+- When a required body section and front-matter keys are both missing,
+  the error is the first missing field in declaration order:
+  `ErrorKind::Type` for a front-matter key. Before, the missing body
+  section (`ErrorKind::Body`) was reported first.
 - `markdown/options.proto`, the `(markdown.body)` option, moved into the crate:
   `rust/markdown/proto/markdown/options.proto`. The import path is the same,
   `markdown/options.proto`. The Cargo dependency now brings the option too, so
@@ -41,6 +50,36 @@ API changes bump the minor.
   to different versions.
 - The fixtures crate `serde_markdown-proto` (not published) no longer carries
   the generated `markdown.body` extension constant.
+
+### Fixed
+
+- Enum fields read back. A field of an enum type (Serde's default,
+  externally tagged form) failed to read with `ErrorKind::Type`, in the
+  fields block and in a body section. Unit variants and variants with
+  content now round-trip in YAML, JSON, and TOML; a unit variant in a body
+  section is its raw name.
+- `#[derive(Markdown)]` follows the struct's `#[serde(rename_all = "...")]`
+  (and `rename_all(serialize = ..., deserialize = ...)`) and drops the `r#`
+  of a raw identifier. Before, a body field of such a struct was written
+  into the fields block, with no error. A body field whose serialize and
+  deserialize names differ is now a compile error.
+- A `Vec<u8>` body whose text reads as a YAML or JSON list (`[1, 2]`,
+  `- a`) reads back as its bytes; before, it read as the list's numbers or
+  failed. A `Vec<u8>` whose text reads as an empty list (`[]`) is
+  `ErrorKind::Body` on write, since it cannot be told from an empty list.
+- A body field with `#[serde(default)]` may be missing from the document:
+  a field without a section is no longer handed to the value, so Serde
+  applies its default (or `None`). A required one is still
+  `ErrorKind::Body`.
+- A TOML date-time in the fields block (`when = 1979-05-27T07:32:00Z`)
+  reads into a string or `Timestamp` field; before, `ErrorKind::Type`.
+- Built without the `yaml` feature, a document whose first slice is prose
+  reads as body, and a body-only document is written with no empty fields
+  block. Before, reading failed with `ErrorKind::FormatDisabled` and writing
+  added an empty JSON or TOML block.
+- Leading `---` lines are skipped in linear time. A document of many of
+  them took quadratic time (40 000 lines: 1.4 s).
+- Every feature set builds and tests, none at all included.
 
 ## [0.3.1] - 2026-10-03
 
@@ -276,8 +315,8 @@ API changes bump the minor.
 - [0.1.0]
 
 [Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.3.1...HEAD
-[0.3.1]: https://github.com/sonalect/serde_markdown/compare/v0.3.1...v0.3.0
-[0.3.0]: https://github.com/sonalect/serde_markdown/compare/v0.3.0...v0.2.3
+[0.3.1]: https://github.com/sonalect/serde_markdown/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/sonalect/serde_markdown/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/sonalect/serde_markdown/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/sonalect/serde_markdown/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/sonalect/serde_markdown/compare/v0.2.0...v0.2.1

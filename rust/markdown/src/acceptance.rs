@@ -490,7 +490,9 @@ fn a_body_only_document_keeps_a_leading_break_and_a_leading_rule() {
 
 /// Fields written in declaration order, not alphabetically.
 #[cfg(feature = "yaml")]
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, crate::Markdown)]
+#[derive(
+    Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, serde_markdown_derive::Markdown,
+)]
 struct Ordered {
     zeta: String,
     alpha: i32,
@@ -552,4 +554,225 @@ fn front_matter_keys_are_read_in_any_order() {
             body: "text".into(),
         }
     );
+}
+
+/// Regressions from the full review: enums, `rename_all`, byte bodies that
+/// read as lists, `#[serde(default)]` body fields, TOML date-times.
+#[cfg(all(feature = "yaml", feature = "json", feature = "toml"))]
+mod review {
+    use serde::{Deserialize, Serialize};
+
+    use crate::{ErrorKind, FieldsLayout, Format, Markdown, from_str, to_string, to_string_with};
+
+    const LANGUAGES: [Format; 3] = [Format::Yaml, Format::Json, Format::Toml];
+    const LAYOUTS: [FieldsLayout; 2] = [FieldsLayout::Fenced, FieldsLayout::Bare];
+
+    fn round_trip<T>(value: &T, formats: &[Format], what: &str)
+    where
+        T: Serialize + serde::de::DeserializeOwned + Markdown + PartialEq + std::fmt::Debug,
+    {
+        for &format in formats {
+            for layout in LAYOUTS {
+                let md = to_string_with(value, format, layout)
+                    .unwrap_or_else(|err| panic!("{what} {format} {layout:?}: {err}"));
+                let back: T = from_str(&md)
+                    .unwrap_or_else(|err| panic!("{what} {format} {layout:?}: {err}\n{md}"));
+                assert_eq!(&back, value, "{what} {format} {layout:?}:\n{md}");
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    enum Status {
+        Draft,
+        #[serde(rename = "live")]
+        Published,
+        Moved(u32),
+        Pair(i32, i32),
+        Point {
+            x: i32,
+            y: i32,
+        },
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct Tagged {
+        status: Status,
+        history: Vec<Status>,
+        #[markdown(body)]
+        mood: Status,
+        #[markdown(body)]
+        maybe: Option<Status>,
+        #[markdown(body)]
+        text: String,
+    }
+
+    #[test]
+    fn enums_round_trip_in_the_fields_and_in_the_body() {
+        let tagged = Tagged {
+            status: Status::Published,
+            history: vec![
+                Status::Draft,
+                Status::Moved(3),
+                Status::Pair(1, 2),
+                Status::Point { x: 1, y: 2 },
+            ],
+            mood: Status::Draft,
+            maybe: Some(Status::Published),
+            text: "body".into(),
+        };
+        round_trip(&tagged, &LANGUAGES, "unit variants in the body");
+        let structured = Tagged {
+            mood: Status::Point { x: 4, y: 5 },
+            maybe: Some(Status::Moved(7)),
+            ..tagged.clone()
+        };
+        round_trip(&structured, &LANGUAGES, "variants with content in the body");
+        let absent = Tagged {
+            maybe: None,
+            ..tagged
+        };
+        round_trip(&absent, &LANGUAGES, "an absent enum body field");
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    #[serde(rename_all = "camelCase")]
+    struct Camel {
+        page_title: String,
+        #[markdown(body)]
+        body_note: String,
+        #[serde(rename = "kept")]
+        #[markdown(body)]
+        renamed_field: String,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    #[serde(rename_all(serialize = "kebab-case", deserialize = "kebab-case"))]
+    struct Kebab {
+        #[markdown(body)]
+        long_name: String,
+        #[markdown(body)]
+        r#type: String,
+    }
+
+    #[derive(Serialize, serde_markdown_derive::Markdown)]
+    #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+    struct Screaming {
+        #[markdown(body)]
+        some_field: String,
+    }
+
+    #[derive(Serialize, serde_markdown_derive::Markdown)]
+    #[serde(rename_all = "PascalCase")]
+    struct Pascal {
+        #[markdown(body)]
+        some_field: String,
+    }
+
+    #[derive(Serialize, serde_markdown_derive::Markdown)]
+    #[serde(rename_all = "SCREAMING-KEBAB-CASE")]
+    struct ScreamingKebab {
+        #[markdown(body)]
+        some_field: String,
+    }
+
+    #[test]
+    fn body_names_follow_rename_all() {
+        assert_eq!(Camel::BODY_FIELDS, ["bodyNote", "kept"]);
+        assert_eq!(Kebab::BODY_FIELDS, ["long-name", "type"]);
+        assert_eq!(Screaming::BODY_FIELDS, ["SOME_FIELD"]);
+        assert_eq!(Pascal::BODY_FIELDS, ["SomeField"]);
+        assert_eq!(ScreamingKebab::BODY_FIELDS, ["SOME-FIELD"]);
+
+        let camel = Camel {
+            page_title: "t".into(),
+            body_note: "the note".into(),
+            renamed_field: "the rest".into(),
+        };
+        let md = to_string(&camel).expect("serialize");
+        assert_eq!(md, "```yaml\npageTitle: t\n```\nthe note\n---\nthe rest");
+        round_trip(&camel, &LANGUAGES, "rename_all camelCase");
+        let kebab = Kebab {
+            long_name: "a".into(),
+            r#type: "b".into(),
+        };
+        round_trip(
+            &kebab,
+            &LANGUAGES,
+            "rename_all kebab-case and a raw identifier",
+        );
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct Bytes {
+        title: String,
+        #[markdown(body)]
+        data: Vec<u8>,
+        #[markdown(body)]
+        tags: Vec<String>,
+    }
+
+    #[test]
+    fn a_byte_body_that_reads_as_a_list_stays_bytes() {
+        for data in [
+            b"[1, 2]".as_slice(),
+            b"- a\n- b",
+            b"{\"k\": 1}",
+            b"plain text",
+            b"",
+        ] {
+            let value = Bytes {
+                title: "t".into(),
+                data: data.to_vec(),
+                tags: vec!["x".into(), "y".into()],
+            };
+            round_trip(&value, &[Format::Yaml, Format::Json], &format!("{data:?}"));
+        }
+        let ambiguous = Bytes {
+            title: "t".into(),
+            data: b"[]".to_vec(),
+            tags: Vec::new(),
+        };
+        let err = to_string(&ambiguous).expect_err("bytes that read as an empty list");
+        assert_eq!(err.kind(), ErrorKind::Body);
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct Defaults {
+        title: String,
+        #[markdown(body)]
+        first: String,
+        #[serde(default)]
+        #[markdown(body)]
+        notes: String,
+    }
+
+    #[test]
+    fn a_body_field_with_a_serde_default_may_be_missing() {
+        let back: Defaults = from_str("```yaml\ntitle: t\n```\nonly the first").expect("default");
+        assert_eq!(back.first, "only the first");
+        assert_eq!(back.notes, "");
+        let err = from_str::<Defaults>("```yaml\ntitle: t\n```\n").expect_err("first is required");
+        assert_eq!(err.kind(), ErrorKind::Body);
+        assert!(err.to_string().contains("first"), "{err}");
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct When {
+        when: String,
+        at: buffa_types::google::protobuf::Timestamp,
+        #[markdown(body)]
+        text: String,
+    }
+
+    #[test]
+    fn a_toml_date_time_reads_as_its_text() {
+        let md = "```toml\nwhen = 1979-05-27T07:32:00Z\nat = 2026-09-17T02:42:00Z\n```\nbody";
+        let back: When = from_str(md).expect("toml date-times");
+        assert_eq!(back.when, "1979-05-27T07:32:00Z");
+        assert_eq!(
+            back.at,
+            buffa_types::google::protobuf::Timestamp::from_unix_secs(1_789_612_920)
+        );
+    }
 }

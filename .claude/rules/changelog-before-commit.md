@@ -28,7 +28,7 @@ wrong, edit it.
 ## Skip (nothing notable)
 
 - The commit is **only** `CHANGELOG.md`.
-- rustfmt / comment-only / agent rules (`.claude/**`, `.cursor/**`) with
+- rustfmt / comment-only / agent rules (`.claude/**`) with
   no library, proto, or `DESIGN.md` change.
 - Clippy / rustc lint-only: same public API, same written bytes, same
   runtime behaviour.

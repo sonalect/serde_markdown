@@ -72,6 +72,8 @@ mod de;
 mod drive;
 mod error;
 mod format;
+#[cfg(any(feature = "yaml", feature = "json", feature = "toml"))]
+mod ir;
 mod markdown;
 mod parse;
 mod ser;

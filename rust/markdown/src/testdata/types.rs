@@ -6,7 +6,7 @@
 use buffa_types::google::protobuf::{Duration, Empty, FieldMask, Int32Value, Struct, Timestamp};
 use serde::{Deserialize, Serialize};
 
-use crate::Markdown;
+use serde_markdown_derive::Markdown;
 
 /// Fixture page (`markdown.testdata.Page`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Markdown)]

@@ -20,22 +20,24 @@ buffa = ["dep:buffa", "dep:buffa-types", "dep:buffa-descriptor"]
 tokio = ["dep:tokio"]
 
 [dependencies]
+serde_markdown_derive = { workspace = true, optional = true }
+buffa = { workspace = true, optional = true }
+buffa-descriptor = { workspace = true, optional = true }
+buffa-types = { workspace = true, optional = true }
 pulldown-cmark = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_markdown_derive = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true, features = ["io-util", "rt"] }
 toml = { workspace = true, optional = true }
 yaml_serde = { workspace = true, optional = true }
-buffa = { workspace = true, optional = true }
-buffa-types = { workspace = true, optional = true }
-buffa-descriptor = { workspace = true, optional = true }
 
 [dev-dependencies]
-buffa = { workspace = true }
-buffa-types = { workspace = true }
-buffa-descriptor = { workspace = true }
 serde_markdown-proto = { workspace = true }
+# The tests derive `Markdown` with or without the `derive` feature.
+serde_markdown_derive = { workspace = true }
+buffa = { workspace = true }
+buffa-descriptor = { workspace = true }
+buffa-types = { workspace = true }
 # The async tests build a runtime; this also puts tokio into the Bazel hub.
 tokio = { workspace = true, features = ["io-util", "rt"] }
 

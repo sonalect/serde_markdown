@@ -3,6 +3,7 @@
 //! [`Format`] and [`FieldsLayout`] live here. Dump and load of the fields
 //! intermediate representation (a JSON value) go through the fence language.
 
+#[cfg(any(feature = "yaml", feature = "json", feature = "toml"))]
 use std::error::Error as StdError;
 use std::fmt;
 
@@ -10,6 +11,8 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::error::Error;
+#[cfg(any(feature = "yaml", feature = "json", feature = "toml"))]
+use crate::ir::Ir;
 
 /// Fence language used when serializing the fields block.
 ///
@@ -58,7 +61,7 @@ pub(crate) fn dump<T: Serialize + ?Sized>(value: &T, format: Format) -> Result<S
     }
 }
 
-/// Decode a fields slice in `format` to a JSON value.
+/// Decode a fields slice in `format` to the fields IR (see [`crate::ir`]).
 pub(crate) fn load(src: &str, format: Format) -> Result<Value, Error> {
     decode(src, format, false)
 }
@@ -79,6 +82,7 @@ fn decode(src: &str, format: Format, body: bool) -> Result<Value, Error> {
     }
 }
 
+#[cfg(any(feature = "yaml", feature = "json", feature = "toml"))]
 fn wrap_decoder<E>(err: E, body: bool) -> Error
 where
     E: Into<Box<dyn StdError + Send + Sync + 'static>>,
@@ -129,7 +133,9 @@ fn dump_toml<T: Serialize + ?Sized>(value: &T) -> Result<String, Error> {
 fn load_yaml(src: &str, body: bool) -> Result<Value, Error> {
     #[cfg(feature = "yaml")]
     {
-        yaml_serde::from_str(src).map_err(|err| wrap_decoder(err, body))
+        yaml_serde::from_str(src)
+            .map(|Ir(value)| value)
+            .map_err(|err| wrap_decoder(err, body))
     }
     #[cfg(not(feature = "yaml"))]
     {
@@ -141,7 +147,9 @@ fn load_yaml(src: &str, body: bool) -> Result<Value, Error> {
 fn load_json(src: &str, body: bool) -> Result<Value, Error> {
     #[cfg(feature = "json")]
     {
-        serde_json::from_str(src).map_err(|err| wrap_decoder(err, body))
+        serde_json::from_str(src)
+            .map(|Ir(value)| value)
+            .map_err(|err| wrap_decoder(err, body))
     }
     #[cfg(not(feature = "json"))]
     {
@@ -153,7 +161,9 @@ fn load_json(src: &str, body: bool) -> Result<Value, Error> {
 fn load_toml(src: &str, body: bool) -> Result<Value, Error> {
     #[cfg(feature = "toml")]
     {
-        toml::from_str(src).map_err(|err| wrap_decoder(err, body))
+        toml::from_str(src)
+            .map(|Ir(value)| value)
+            .map_err(|err| wrap_decoder(err, body))
     }
     #[cfg(not(feature = "toml"))]
     {
