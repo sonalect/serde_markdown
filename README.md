@@ -32,7 +32,8 @@ let back: Page = from_str(&md)?;
 ```
 
 Also `to_vec` / `to_writer`. Feature `buffa` (off-default) adds
-`annotate_markdown_body` and `PROTO_INCLUDE`.
+`annotate_markdown_body`. `PROTO_INCLUDE` is the include path of the
+`(markdown.body)` option (see [Proto option](#proto-option)).
 
 | Feature | Default | Role |
 | --- | --- | --- |
@@ -49,12 +50,12 @@ Also `to_vec` / `to_writer`. Feature `buffa` (off-default) adds
 | [`DESIGN.md`](DESIGN.md) | Format, mapping, proto options, Bazel |
 | [`ROADMAP.md`](ROADMAP.md) | Work order: parse, ser/de, derive, buffa, examples (M0–M15) |
 | [`CHANGELOG.md`](CHANGELOG.md) | Notable changes |
-| [`proto/markdown`](proto/markdown) | Public `(markdown.body)` option |
+| [`rust/markdown`](rust/markdown) | Format crate |
+| [`rust/markdown/proto`](rust/markdown/proto) | Public `(markdown.body)` option, shipped inside the crate |
+| [`rust/markdown/testdata`](rust/markdown/testdata) | Golden Markdown documents |
+| [`rust/markdown_derive`](rust/markdown_derive) | `#[derive(Markdown)]` |
 | [`proto/markdown/testdata`](proto/markdown/testdata) | Fixture messages (not public API) |
-| [`rust/serde_markdown/testdata`](rust/serde_markdown/testdata) | Golden Markdown documents |
-| [`rust/generated`](rust/generated) | Buffa stubs from `proto/markdown` |
-| [`rust/serde_markdown`](rust/serde_markdown) | Format crate |
-| [`rust/serde_markdown_derive`](rust/serde_markdown_derive) | `#[derive(Markdown)]` |
+| [`rust/proto`](rust/proto) | Buffa stubs of the fixtures |
 | [`rust/examples`](rust/examples) | Runnable `example-page` and `example-protobuf` |
 | [`MODULE.bazel`](MODULE.bazel) | Bazel module: Rust, Buf, linters |
 
@@ -71,10 +72,51 @@ bazel run //rust/examples/page
 bazel run //rust/examples/protobuf
 ```
 
+## Proto option
+
+`markdown/options.proto` declares `(markdown.body)`. It ships inside the crate,
+so the Cargo dependency that brings the library is the only one a consumer
+needs; there is no Bazel module to depend on as well.
+
+A build script passes `serde_markdown::PROTO_INCLUDE` to protoc or buffa as an
+include path, so `import "markdown/options.proto"` resolves.
+
+In Bazel, crate_universe fetches the crate with its `proto/` directory. Name the
+file with an annotation, alias it into the hub, and stage it for buf:
+
+```starlark
+# rust.MODULE.bazel, next to the `from_cargo` (or `from_specs`) of hub `crates`
+crate.annotation(
+    crate = "serde_markdown",
+    additive_build_file_content = """
+filegroup(
+    name = "proto",
+    srcs = ["proto/markdown/options.proto"],
+    visibility = ["//visibility:public"],
+)
+""",
+    extra_aliased_targets = {"serde_markdown_proto": "proto"},
+)
+```
+
+```starlark
+# BUILD.bazel
+load("@bazel_utils_buf//:buf.bzl", "buf_deps")
+
+buf_deps(
+    name = "markdown",
+    srcs = ["@crates//:serde_markdown_proto"],
+    strip_import_prefix = "/proto",  # stages markdown/options.proto
+    visibility = ["//visibility:public"],
+)
+```
+
+Repin the crate_universe lockfile after adding the annotation.
+
 ## Proto generate
 
-Writes `rust/generated/markdown/` (`bazel test //proto/markdown:generate_test`
-checks they match):
+Writes the fixtures' stubs to `rust/proto/markdown/`
+(`bazel test //proto/markdown:generate_test` checks they match):
 
 ```bash
 bazel run //proto/markdown:generate
@@ -86,11 +128,11 @@ protobuf proto toolchain prebuilt (not `@protobuf//:protoc`, which compiles
 from source).
 
 `google/protobuf/*.proto` comes from `buf.build/protocolbuffers/wellknowntypes`.
-The workspace [`buf.yaml`](buf.yaml) lists both `proto/` and
+The workspace [`buf.yaml`](buf.yaml) lists `rust/markdown/proto`, `proto/`, and
 `rust/examples/protobuf/proto`, so Buf LSP can resolve
-`import "markdown/options.proto"` in the example. [`buf.gen.rust.yaml`](buf.gen.rust.yaml)
-`inputs` is `proto/` only, so example `Page` is not emitted into
-`rust/generated`. If the Buf extension still reports
+`import "markdown/options.proto"` in the fixtures and the example.
+[`buf.gen.rust.yaml`](buf.gen.rust.yaml) `inputs` is `proto/` only, so neither
+the option nor the example `Page` is emitted into `rust/proto`. If the Buf extension still reports
 `imported file does not exist` for well-known types, run `buf dep update`
 (refreshes [`buf.lock`](buf.lock)) and reload the window.
 

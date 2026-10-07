@@ -8,6 +8,26 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+### Changed
+
+- `markdown/options.proto`, the `(markdown.body)` option, moved into the crate:
+  `rust/markdown/proto/markdown/options.proto`. The import path is the same,
+  `markdown/options.proto`. The Cargo dependency now brings the option too, so
+  a consumer needs no second channel for it.
+- `PROTO_INCLUDE` points into the crate (`<crate>/proto`), so it works for a
+  crate fetched alone, not only from a checkout of this repository.
+
+### Removed
+
+- The Bazel label `@serde_markdown//proto/markdown:options.proto`. A Bazel
+  consumer drops its `bazel_dep` and `git_override` of `serde_markdown` and
+  reaches the file through its crate_universe hub with an annotation
+  (`additive_build_file_content` plus `extra_aliased_targets`); the README
+  shows it. With one dependency the proto and the crate can no longer drift
+  to different versions.
+- The fixtures crate `serde_markdown-proto` (not published) no longer carries
+  the generated `markdown.body` extension constant.
+
 ## [0.3.1] - 2026-10-03
 
 ### Fixed

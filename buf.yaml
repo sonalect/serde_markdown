@@ -1,8 +1,11 @@
 # Workspace buf config (Buf LSP).
-# `proto/` is the public/testdata module; imports are `markdown/options.proto`.
-# `rust/examples/protobuf/proto` is the example Page (same import).
+# `rust/markdown/proto` is the public `(markdown.body)` option, shipped inside
+# the crate; imports are `markdown/options.proto`.
+# `proto/` is the testdata module; `rust/examples/protobuf/proto` is the
+# example Page (same import).
 version: v2
 modules:
+  - path: rust/markdown/proto
   - path: proto
   - path: rust/examples/protobuf/proto
 lint:

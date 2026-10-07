@@ -2,11 +2,6 @@ load("@bazel_lib//lib:write_source_files.bzl", "write_source_files")
 load("@bazel_utils_buf//:buf.bzl", "buf_format", "buf_generate", "buf_lint_test", "buf_module")
 load("//bazel:compat.bzl", "NOT_WINDOWS")
 
-exports_files(
-    ["options.proto"],
-    visibility = ["//visibility:public"],
-)
-
 filegroup(
     name = "protos",
     srcs = glob(["**/*.proto"]),
@@ -18,6 +13,7 @@ buf_module(
     srcs = [
         ":protos",
         "//rust/examples/protobuf:protos",
+        "//rust/markdown:proto",
     ],
     visibility = ["//visibility:public"],
     deps = [

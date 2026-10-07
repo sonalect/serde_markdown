@@ -337,7 +337,7 @@ Without the derive, implement `Markdown` on the type (empty `BODY_FIELDS` for fi
 
 ### 3.2 Protobuf (buffa): field option + editions feature
 
-Ship `proto/markdown/options.proto` (protobuf package `markdown`) and read it from codegen. The Rust crate name stays `serde_markdown`.
+Ship `markdown/options.proto` (protobuf package `markdown`) inside the crate, at `rust/markdown/proto/markdown/options.proto`, and read it from codegen. The Rust crate name stays `serde_markdown`.
 
 Works for **proto3**, **Edition 2023**, and **Edition 2024**. Proto2 is out of scope unless it falls out of buffa for free.
 
@@ -378,9 +378,15 @@ message Page {
 }
 ```
 
-Shipped options file (`proto/markdown/options.proto`; field number `20260917`).
+Shipped options file (`rust/markdown/proto/markdown/options.proto`; field number `20260917`).
 The file is **proto3** so proto3 toolchains without editions can compile it;
 Edition 2023 / 2024 files import it the same way.
+
+The file sits inside the crate, so the Cargo dependency is the one channel a
+consumer needs: a build script passes `serde_markdown::PROTO_INCLUDE` as an
+include path, and Bazel reaches the file in the crate's crate_universe
+repository through an annotation (§6.5). There is no Bazel module to depend
+on as well, so the proto and the crate cannot drift to different versions.
 
 ```protobuf
 syntax = "proto3";
@@ -592,7 +598,7 @@ pub trait Markdown {
 }
 
 pub const DESIGN: &str = "DESIGN.md";
-pub const PROTO_INCLUDE: &str = /* CARGO_MANIFEST_DIR/../../proto */;
+pub const PROTO_INCLUDE: &str = /* CARGO_MANIFEST_DIR/proto */;
 ```
 
 `from_str` / `from_slice` / `from_reader` require `DeserializeOwned` because the mapping layer owns a JSON IR; they do not borrow from the input. Feature `buffa` exports `serde_markdown::buffa::annotate_markdown_body`.
@@ -602,13 +608,13 @@ pub const PROTO_INCLUDE: &str = /* CARGO_MANIFEST_DIR/../../proto */;
 ```text
 DESIGN.md                                 # format mapping (normative)
 ROADMAP.md                                # implementation stages M0–M15
-proto/markdown/options.proto              # public (markdown.body) option
 proto/markdown/testdata/*.proto           # fixture messages (buffa generate)
-rust/generated/                           # bazel run //proto/markdown:generate
-rust/serde_markdown/                      # format crate
-rust/serde_markdown/testdata/markdown/    # golden documents
-rust/serde_markdown/src/testdata/         # hand-written structs + values
-rust/serde_markdown_derive/               # #[derive(Markdown)]
+rust/proto/markdown/                      # bazel run //proto/markdown:generate
+rust/markdown/                            # format crate
+rust/markdown/proto/markdown/options.proto  # public (markdown.body) option, shipped in the crate
+rust/markdown/testdata/markdown/          # golden documents
+rust/markdown/src/testdata/               # hand-written structs + values
+rust/markdown_derive/                     # #[derive(Markdown)]
 rust/examples/                            # runnable page + protobuf binaries
 rust/examples/protobuf/proto/             # example Page; that crate's build.rs + buffa_build
 ```
@@ -710,9 +716,9 @@ bzlmod, `bazel_utils_*`, hermetic Buf, buffa plugins, `write_source_files` back 
 | `MODULE.bazel` | `serde_markdown` module, `protobuf` 36.1.bcr.1, `rules_rust`, `bazel_utils_{bazel,buf,core,md,protoc,rust}` |
 | `buf.MODULE.bazel` | Buf CLI `v1.73.0`; `protoc.plugin` pins `protoc-gen-buffa` and `protoc-gen-buffa-packaging` `v0.9.2` |
 | `rust.MODULE.bazel` | Rust 1.99.0 / edition 2024, crate_universe (workspace crates only) |
-| `buf.yaml` | modules `proto/` and `rust/examples/protobuf/proto` (LSP, lint, format); dep `buf.build/protocolbuffers/wellknowntypes` |
+| `buf.yaml` | modules `rust/markdown/proto` (the option), `proto/` (fixtures), and `rust/examples/protobuf/proto` (LSP, lint, format) |
 | `buf.gen.rust.yaml` | local `protoc-gen-buffa` (`json=true`) + local `protoc-gen-buffa-packaging`; `inputs` is `proto/` only |
-| `proto/markdown/BUILD.bazel` | `buf_module`, lint, format, generate → `rust/generated/markdown` (`protoc.plugin` tags on PATH) |
+| `proto/markdown/BUILD.bazel` | `buf_module` (fixtures, the option from `//rust/markdown:proto`, the example), lint, format, generate → `rust/proto/markdown` (`protoc.plugin` tags on PATH) |
 | `rust/examples/protobuf` | consumer-shaped `build.rs` (`buffa_build` + `annotate_markdown_body`); Bazel `cargo_build_script` + `protoc_prefix` from the proto toolchain prebuilt (not `@protobuf//:protoc`). No checked-in stubs. `cargo run -p example-protobuf` needs `PROTOC`. |
 
 Commands:
@@ -729,9 +735,15 @@ bazel test //bazel:markdown
 bazel run //bazel:format
 ```
 
-`annotate_markdown_body` applies for consumers who compile their own `.proto` files. The in-tree protobuf example is that path. This repo’s fixtures in `proto/markdown/testdata/` (`markdown.testdata.*`) stay on Buf generate into `rust/generated` so WKT + `(markdown.body)` round-trips can be tested against generated buffa types. They are not part of the public `markdown` proto API. Matching golden Markdown lives in `rust/serde_markdown/testdata/markdown/`; hand-written structs are `serde_markdown` test-only types in `src/testdata/`.
+`annotate_markdown_body` applies for consumers who compile their own `.proto` files. The in-tree protobuf example is that path. This repo’s fixtures in `proto/markdown/testdata/` (`markdown.testdata.*`) stay on Buf generate into `rust/proto/markdown` so WKT + `(markdown.body)` round-trips can be tested against generated buffa types. They are not part of the public `markdown` proto API. Matching golden Markdown lives in `rust/markdown/testdata/markdown/`; hand-written structs are `serde_markdown` test-only types in `src/testdata/`.
 
-Downstream Bazel users depend on the published proto as a Buf module (`markdown/options.proto`).
+Downstream Bazel users reach `markdown/options.proto` through the same Cargo
+dependency that brings the crate, not through a `bazel_dep`. crate_universe
+fetches a git crate with `strip_prefix` set to the crate's directory, so the
+crate's repository holds `proto/markdown/options.proto`. An annotation names
+it and aliases it into the hub; `buf_deps` with `strip_import_prefix =
+"/proto"` stages it as `markdown/options.proto`. The README shows the
+annotation.
 
 ## 7. Errors
 

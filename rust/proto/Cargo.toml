@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
-description = "Buffa types from proto/markdown (public options plus testdata fixtures)."
+description = "Buffa types of the test fixtures in proto/markdown/testdata."
 
 [lib]
 path = "lib.rs"

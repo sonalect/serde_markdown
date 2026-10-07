@@ -26,11 +26,11 @@ cargo_build_script(
     build_script_env = {
         "PROTOC": "$(execpath :protoc_prefix)/bin/protoc",
         "PROTOBUF_INCLUDE": "$(execpath :protoc_prefix)/include",
-        "SERDE_MARKDOWN_PROTO_INCLUDE": "$(execpath //proto/markdown:options.proto)/../..",
+        "SERDE_MARKDOWN_PROTO_INCLUDE": "$(execpath //rust/markdown:proto)/../..",
     },
     crate_root = "build.rs",
     data = glob(["proto/**/*.proto"]) + [
-        "//proto/markdown:options.proto",
+        "//rust/markdown:proto",
     ],
     edition = "2024",
     pkg_name = "example-protobuf",

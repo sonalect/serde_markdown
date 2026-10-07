@@ -52,9 +52,10 @@ pub const DESIGN: &str = "DESIGN.md";
 
 /// Directory containing `markdown/options.proto` for include paths.
 ///
-/// Pass this to buffa or protoc includes so `import "markdown/options.proto"`
-/// resolves.
-pub const PROTO_INCLUDE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../proto");
+/// The file ships inside this crate, so the Cargo dependency that brings the
+/// library also brings the option. Pass this to buffa or protoc includes so
+/// `import "markdown/options.proto"` resolves.
+pub const PROTO_INCLUDE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/proto");
 
 #[cfg(feature = "buffa")]
 pub mod buffa;

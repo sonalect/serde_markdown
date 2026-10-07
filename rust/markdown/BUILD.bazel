@@ -2,6 +2,15 @@ load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
 
 exports_files(["Cargo.toml"])
 
+# The public `(markdown.body)` option, at its import path under `proto/`. It
+# lives inside the crate so a consumer gets it through the Cargo dependency
+# (README, "Proto option from Bazel"); there is no Bazel module to depend on.
+filegroup(
+    name = "proto",
+    srcs = ["proto/markdown/options.proto"],
+    visibility = ["//visibility:public"],
+)
+
 rust_library(
     name = "serde_markdown",
     srcs = glob(["src/**/*.rs"]),

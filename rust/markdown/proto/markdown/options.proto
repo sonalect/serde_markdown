@@ -4,6 +4,11 @@
 //
 //   string text = 4 [(markdown.body) = true];
 //
+// The file ships inside the `serde_markdown` crate, under `proto/`, so a
+// consumer reaches it through the same Cargo dependency that brings the
+// library: `serde_markdown::PROTO_INCLUDE` in a build script, or a
+// crate_universe annotation in Bazel (see the README).
+//
 // This file is proto3 so toolchains without editions can still compile it.
 // A FeatureSet feature named `markdown.body` cannot coexist with this
 // option: both would be the identifier `markdown.body` in package
