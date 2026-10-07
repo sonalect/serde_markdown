@@ -8,6 +8,8 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-07
+
 ### Added
 
 - Feature `tokio` (off by default) adds `serde_markdown::tokio`, the async
@@ -305,6 +307,7 @@ API changes bump the minor.
 ## Links
 
 - [Unreleased]
+- [0.4.0]
 - [0.3.1]
 - [0.3.0]
 - [0.2.3]
@@ -314,7 +317,8 @@ API changes bump the minor.
 - [0.1.1]
 - [0.1.0]
 
-[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/sonalect/serde_markdown/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/sonalect/serde_markdown/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/sonalect/serde_markdown/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/sonalect/serde_markdown/compare/v0.2.2...v0.2.3

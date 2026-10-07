@@ -14,7 +14,7 @@ edition = "2024"
 rust-version = "1.99.0"
 license = "Apache-2.0"
 repository = "https://github.com/sonalect/serde_markdown"
-version = "0.3.1"
+version = "0.4.0"
 
 [workspace.dependencies]
 serde_markdown = { path = "rust/markdown" }
