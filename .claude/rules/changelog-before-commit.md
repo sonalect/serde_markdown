@@ -38,10 +38,13 @@ wrong, edit it.
   Actions, or a crate only the examples and tests use.
 - The owner explicitly waived the changelog for this commit.
 
-A dependency update (Renovate pull request) that moves a crate
-`serde_markdown` or `serde_markdown_derive` depends on is **not** skipped:
-the `=` pin forces that exact version on consumers. Add a `Changed` line
-on the pull request's branch before merging.
+A Renovate pull request carries no `CHANGELOG.md` edit, even when it moves
+a crate `serde_markdown` or `serde_markdown_derive` depends on (the `=` pin
+forces that version on consumers). Those moves are written at release,
+from the diff since the last tag (`.claude/skills/versioning/SKILL.md`,
+"Dependency moves"). Consumers take tags, not main, so `## [Unreleased]`
+only has to be complete when the tag is cut. A security update is
+released at once and gets its line in that release.
 
 Do not skip for "small" changes to the public API, error kinds, fence
 languages, the `(markdown.body)` option, or how a document is split,

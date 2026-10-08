@@ -73,7 +73,7 @@
       matchManagers: ['cargo'],
       rangeStrategy: 'bump',
       prBodyNotes: [
-        'A bump of a dependency of `serde_markdown` or `serde_markdown_derive` forces that exact version on consumers: add a `Changed` line under `## [Unreleased]` of `CHANGELOG.md` before merging (`.claude/rules/changelog-before-commit.md`).',
+        'No `CHANGELOG.md` edit here: moves of the dependencies of `serde_markdown` and `serde_markdown_derive` are written at release (`.claude/skills/versioning/SKILL.md`, "Dependency moves").',
       ],
     },
     {

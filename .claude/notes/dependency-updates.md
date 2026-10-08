@@ -39,6 +39,13 @@ the protoc plugins from a catalog of versions with their sha256. A version
 missing from it fails the build. Add it to `bazel_utils`, release, and let
 the `bazel_utils` update land before the buf or buffa one.
 
+## Changelog
+
+Renovate's pull requests do not touch `CHANGELOG.md`. The dependency
+moves consumers see are written at release, from the diff since the last
+tag (`versioning` skill, "Dependency moves"); decided 8 October 2026, so
+merges stay one click and the PRs never conflict over `## [Unreleased]`.
+
 ## Schedule
 
 Trial: every day before 06:00 UTC (`schedule` in `renovate.json5`), so the

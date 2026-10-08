@@ -45,6 +45,26 @@ breaking change.
 Pinned `bazel_utils_*` / `rules_rust` / Buf versions are **not** this
 number.
 
+## Dependency moves
+
+Renovate's merges leave `CHANGELOG.md` alone
+(`.claude/rules/changelog-before-commit.md`). Before moving
+`## [Unreleased]` into the release section, add what they changed for
+consumers:
+
+```bash
+git diff "vPREVIOUS" HEAD -- Cargo.toml rust/markdown/Cargo.toml rust/markdown_derive/Cargo.toml
+```
+
+Every `=` pin that moved, for a crate `serde_markdown` or
+`serde_markdown_derive` lists under `[dependencies]` (an optional one
+included), goes into one `### Changed` line: `` Dependencies: `serde`
+=1.0.230, `toml` =1.1.7. `` Crates only the examples, tests, or
+`serde_markdown-proto` use, and tooling (Bazel, `bazel_utils`, buf, the
+protoc plugins, the Rust toolchain, GitHub Actions), stay out. A major
+move of a crate whose types the public API exposes (`buffa`, `serde`) is
+breaking: bump as for a breaking change.
+
 ## Lockstep files
 
 Set the same `MAJOR.MINOR.PATCH` everywhere:
