@@ -1,0 +1,62 @@
+# Renovate edits Cargo.toml, Cargo.lock, and MODULE.bazel but runs no Bazel,
+# so `cargo-bazel-lock.json` and `MODULE.bazel.lock` of its branch go stale.
+# This job repins them (`.claude/rules/cargo-bazel-lock.md`) and pushes the
+# result to the branch.
+#
+# The push uses the secret REPIN_TOKEN (a fine-grained token with Contents
+# read and write on this repository), not GITHUB_TOKEN: a push made with
+# GITHUB_TOKEN starts no workflow, so CI would never test the repinned tree.
+name: Repin
+
+on:
+  pull_request:
+    paths:
+      - "**/Cargo.toml"
+      - Cargo.lock
+      - MODULE.bazel
+      - "*.MODULE.bazel"
+      - .bazelversion
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repin-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  repin:
+    if: startsWith(github.head_ref, 'renovate/')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      # No credentials on disk while Bazel runs the new dependencies'
+      # repository rules; the token appears only in the push step.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.head_ref }}
+          persist-credentials: false
+      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
+        with:
+          bazelisk-cache: true
+          repository-cache: true
+          cache-save: false
+      - run: CARGO_BAZEL_REPIN=1 bazel fetch @serde_markdown_cargo//:all
+      - name: Push the repinned locks
+        env:
+          BRANCH: ${{ github.head_ref }}
+          REPIN_TOKEN: ${{ secrets.REPIN_TOKEN }}
+        run: |
+          git add Cargo.lock cargo-bazel-lock.json MODULE.bazel.lock
+          if git diff --cached --quiet; then
+            echo "The locks are current."
+            exit 0
+          fi
+          if [ -z "$REPIN_TOKEN" ]; then
+            echo "::error::The locks are stale and the secret REPIN_TOKEN is not set."
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Repin the crate_universe and Bazel module locks."
+          git push "https://x-access-token:${REPIN_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${BRANCH}"

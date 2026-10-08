@@ -1,0 +1,118 @@
+// Renovate (Mend Renovate App): dependency update pull requests.
+// What it tracks, the groups, and why: .claude/notes/dependency-updates.md.
+{
+  $schema: 'https://docs.renovatebot.com/renovate-schema.json',
+  extends: ['config:recommended', 'helpers:pinGitHubActionDigests'],
+  // Trial schedule: every day, so the flow can be watched. Widen to weekly
+  // once it is trusted (the note says how).
+  schedule: ['* 0-5 * * *'],
+  // .claude/rules/dependency-quarantine.md: no version younger than 2 days.
+  // `strict` opens no branch at all until the age has passed.
+  minimumReleaseAge: '2 days',
+  internalChecksFilter: 'strict',
+  labels: ['dependencies'],
+  // .github/workflows/repin.yml commits the repinned locks to Renovate's
+  // branches; Renovate keeps rebasing a branch that has those commits.
+  gitIgnoredAuthors: ['41898282+github-actions[bot]@users.noreply.github.com'],
+  customManagers: [
+    {
+      customType: 'regex',
+      description: 'Rust toolchain: rust-toolchain.toml and RUST_VERSION of rust.MODULE.bazel',
+      managerFilePatterns: ['/^rust-toolchain\\.toml$/', '/^rust\\.MODULE\\.bazel$/'],
+      matchStrings: [
+        'channel = "(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
+        'RUST_VERSION = "(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
+      ],
+      depNameTemplate: 'rust',
+      packageNameTemplate: 'rust-lang/rust',
+      datasourceTemplate: 'github-releases',
+    },
+    {
+      customType: 'regex',
+      description: 'bazel_utils: the tag of every git_override',
+      managerFilePatterns: ['/^MODULE\\.bazel$/'],
+      matchStrings: [
+        'remote = "https://github\\.com/sonalect/bazel_utils\\.git",\\s+strip_prefix = "[^"]*",\\s+tag = "(?<currentValue>v[^"]+)"',
+      ],
+      depNameTemplate: 'sonalect/bazel_utils',
+      datasourceTemplate: 'github-tags',
+    },
+    {
+      customType: 'regex',
+      description: 'bazel_utils: the version of every bazel_dep (the tag without its v)',
+      managerFilePatterns: ['/^MODULE\\.bazel$/'],
+      matchStrings: [
+        'bazel_dep\\(name = "bazel_utils_[a-z]+", version = "(?<currentValue>[^"]+)"\\)',
+      ],
+      depNameTemplate: 'sonalect/bazel_utils',
+      datasourceTemplate: 'github-tags',
+      extractVersionTemplate: '^v(?<version>.+)$',
+    },
+    {
+      customType: 'regex',
+      description: 'Buf CLI of the buf toolchain',
+      managerFilePatterns: ['/^buf\\.MODULE\\.bazel$/'],
+      matchStrings: ['buf\\.toolchains\\(version = "(?<currentValue>v[^"]+)"\\)'],
+      depNameTemplate: 'buf',
+      packageNameTemplate: 'bufbuild/buf',
+      datasourceTemplate: 'github-releases',
+    },
+    {
+      customType: 'regex',
+      description: 'protoc-gen-buffa and protoc-gen-buffa-packaging',
+      managerFilePatterns: ['/^buf\\.MODULE\\.bazel$/'],
+      matchStrings: [
+        'name = "protoc-gen-buffa(?:-packaging)?",\\s+version = "(?<currentValue>v[^"]+)"',
+      ],
+      depNameTemplate: 'protoc-gen-buffa',
+      packageNameTemplate: 'anthropics/buffa',
+      datasourceTemplate: 'github-releases',
+    },
+  ],
+  packageRules: [
+    {
+      // The crates are pinned with `=`: a bump moves the pin, not only the lock.
+      matchManagers: ['cargo'],
+      rangeStrategy: 'bump',
+      prBodyNotes: [
+        'A bump of a dependency of `serde_markdown` or `serde_markdown_derive` forces that exact version on consumers: add a `Changed` line under `## [Unreleased]` of `CHANGELOG.md` before merging (`.claude/rules/changelog-before-commit.md`).',
+      ],
+    },
+    {
+      groupName: 'Bazel tooling',
+      matchManagers: ['bazel-module', 'bazelisk'],
+    },
+    {
+      // The crates and the protoc plugins must stay on one version.
+      groupName: 'buffa',
+      matchPackageNames: ['/^buffa(-.+)?$/', 'anthropics/buffa'],
+    },
+    {
+      groupName: 'Rust toolchain',
+      matchPackageNames: ['rust-lang/rust'],
+    },
+    {
+      // The owner's own repository: no quarantine.
+      groupName: 'bazel_utils',
+      matchPackageNames: ['sonalect/bazel_utils'],
+      minimumReleaseAge: null,
+    },
+    {
+      // bazel_utils is not in the BCR; the custom managers above track it.
+      matchManagers: ['bazel-module'],
+      matchPackageNames: ['/^bazel_utils_/'],
+      enabled: false,
+    },
+    {
+      // Fetched through the bazel_utils catalog: an unknown version fails.
+      matchPackageNames: ['bufbuild/buf', 'anthropics/buffa'],
+      prBodyNotes: [
+        'This version is fetched through the catalog of `bazel_utils` (`buf/registry.bzl`, `protoc/plugins/*/registry.bzl`). Until a `bazel_utils` release lists it, CI fails with an unknown-version error: add it there first, then let the `bazel_utils` update land.',
+      ],
+    },
+    {
+      groupName: 'GitHub Actions',
+      matchManagers: ['github-actions'],
+    },
+  ],
+}

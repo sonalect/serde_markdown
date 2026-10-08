@@ -15,4 +15,8 @@ This is a quiet quarantine against freshly published malicious releases.
   version exists.
 - Applies to new packages and to version bumps of existing ones, git-tag
   pins of forks included. Does not apply to this repo's own workspace /
-  path dependencies.
+  path dependencies, nor to the owner's `github.com/sonalect/bazel_utils`.
+- Renovate holds back what it tracks for the same 2 days
+  (`minimumReleaseAge` in `.github/renovate.json5`). A transitive crate
+  that its `Cargo.lock` update pulls in is not checked: look at the lock
+  diff of the pull request before merging.

@@ -6,6 +6,7 @@ before planning; open a note when its topic comes up.
 
 | Note | What it holds |
 | - | - |
+| `dependency-updates.md` | Renovate, CI, and the repin workflow: what is tracked, the trial schedule, what to watch |
 
 ## References
 

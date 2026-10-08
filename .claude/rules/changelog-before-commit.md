@@ -32,7 +32,16 @@ wrong, edit it.
   no library, proto, or `DESIGN.md` change.
 - Clippy / rustc lint-only: same public API, same written bytes, same
   runtime behaviour.
+- CI and bot configuration (`.github/**`).
+- A dependency update that only moves tooling: Bazel, Bazel modules,
+  `bazel_utils`, buf, the protoc plugins, the Rust toolchain, GitHub
+  Actions, or a crate only the examples and tests use.
 - The owner explicitly waived the changelog for this commit.
+
+A dependency update (Renovate pull request) that moves a crate
+`serde_markdown` or `serde_markdown_derive` depends on is **not** skipped:
+the `=` pin forces that exact version on consumers. Add a `Changed` line
+on the pull request's branch before merging.
 
 Do not skip for "small" changes to the public API, error kinds, fence
 languages, the `(markdown.body)` option, or how a document is split,
