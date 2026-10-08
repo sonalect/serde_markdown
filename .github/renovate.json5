@@ -16,16 +16,14 @@
   gitIgnoredAuthors: ['41898282+github-actions[bot]@users.noreply.github.com'],
   customManagers: [
     {
+      // rust-toolchain.toml has a built-in manager (rust-toolchain); this
+      // one moves the Bazel copy of the same version with it.
       customType: 'regex',
-      description: 'Rust toolchain: rust-toolchain.toml and RUST_VERSION of rust.MODULE.bazel',
-      managerFilePatterns: ['/^rust-toolchain\\.toml$/', '/^rust\\.MODULE\\.bazel$/'],
-      matchStrings: [
-        'channel = "(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
-        'RUST_VERSION = "(?<currentValue>\\d+\\.\\d+\\.\\d+)"',
-      ],
+      description: 'Rust toolchain: RUST_VERSION of rust.MODULE.bazel',
+      managerFilePatterns: ['/^rust\\.MODULE\\.bazel$/'],
+      matchStrings: ['RUST_VERSION = "(?<currentValue>\\d+\\.\\d+\\.\\d+)"'],
       depNameTemplate: 'rust',
-      packageNameTemplate: 'rust-lang/rust',
-      datasourceTemplate: 'github-releases',
+      datasourceTemplate: 'rust-version',
     },
     {
       customType: 'regex',
@@ -89,7 +87,7 @@
     },
     {
       groupName: 'Rust toolchain',
-      matchPackageNames: ['rust-lang/rust'],
+      matchDatasources: ['rust-version'],
     },
     {
       // The owner's own repository: no quarantine.

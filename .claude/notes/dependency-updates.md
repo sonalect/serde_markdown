@@ -25,7 +25,7 @@ them. Set up 8 October 2026.
 | `buffa` | the buffa crates, the two `protoc-gen-buffa*` in `buf.MODULE.bazel` | crates.io, `anthropics/buffa` releases |
 | `Bazel tooling` | `bazel_dep` in `MODULE.bazel`, `.bazelversion` | BCR, Bazel releases |
 | `bazel_utils` | every `bazel_dep` and `git_override` tag of it | `sonalect/bazel_utils` tags, no quarantine |
-| `Rust toolchain` | `rust-toolchain.toml`, `RUST_VERSION` in `rust.MODULE.bazel` | `rust-lang/rust` releases |
+| `Rust toolchain` | `rust-toolchain.toml`, `RUST_VERSION` in `rust.MODULE.bazel` | Rust release channel (`rust-version`) |
 | `buf` (alone) | `buf.toolchains(version)` | `bufbuild/buf` releases |
 | `GitHub Actions` | `.github/workflows/*.yml`, pinned by digest | GitHub |
 
