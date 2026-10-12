@@ -24,6 +24,7 @@ rust_library(
 
 rust_test(
     name = "test",
+    size = "small",
     crate = ":proto",
     visibility = ["//rust:__pkg__"],
 )

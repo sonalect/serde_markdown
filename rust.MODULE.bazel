@@ -24,5 +24,16 @@ cargo.from_cargo(
     manifests = [
         "//:Cargo.toml",
     ],
+    # The platforms CI builds on (Linux, macOS, Windows; amd64 and arm64). The
+    # default set leaves out x86_64-apple-darwin and aarch64-pc-windows-msvc,
+    # so every Rust target was silently skipped there as incompatible.
+    supported_platform_triples = [
+        "aarch64-apple-darwin",
+        "aarch64-pc-windows-msvc",
+        "aarch64-unknown-linux-gnu",
+        "x86_64-apple-darwin",
+        "x86_64-pc-windows-msvc",
+        "x86_64-unknown-linux-gnu",
+    ],
 )
 use_repo(cargo, "serde_markdown_cargo")

@@ -20,5 +20,6 @@ buildifier_format(
 
 markdownlint_test(
     name = "markdown",
+    size = "small",
     target_compatible_with = NOT_WINDOWS,
 )
