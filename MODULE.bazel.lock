@@ -603,12 +603,13 @@
     },
     "@@rules_rust+//crate_universe/private:internal_extensions.bzl%cu_nr": {
       "general": {
-        "bzlTransitiveDigest": "GthKddzjL95PH06t8RBIkTC6ECF//DovH9o/17ziFSg=",
+        "bzlTransitiveDigest": "OE/TX+OoAuZtF3jNnmMu8Mdc+q0eDCHRQcFlQLdd+vo=",
         "usagesDigest": "McimNXAztVHDzspa1Kng94T+YeyY/44zx9FkNqIMn2s=",
         "recordedInputs": [
           "REPO_MAPPING:apple_support+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:bazel_features+,bazel_features_globals bazel_features++version_extension+bazel_features_globals",
           "REPO_MAPPING:bazel_features+,bazel_features_version bazel_features++version_extension+bazel_features_version",
+          "REPO_MAPPING:rules_cc+,bazel_features bazel_features+",
           "REPO_MAPPING:rules_cc+,bazel_skylib bazel_skylib+",
           "REPO_MAPPING:rules_cc+,bazel_tools bazel_tools",
           "REPO_MAPPING:rules_cc+,cc_compatibility_proxy rules_cc++compatibility_proxy+cc_compatibility_proxy",
