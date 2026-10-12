@@ -1,5 +1,5 @@
 {
-  "checksum": "2b447a58efa1e939c70264c02256a6f073d98149a56eca1f6905169a39292e08",
+  "checksum": "bd6a2663e23d8c49bed925e53815fb7d40f990a321f6e1c1aa28a658878937ed",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -2272,7 +2272,7 @@
             "target": "quote"
           },
           {
-            "id": "syn 3.0.6",
+            "id": "syn 3.0.7",
             "target": "syn"
           }
         ],
@@ -2496,7 +2496,7 @@
             "target": "quote"
           },
           {
-            "id": "syn 3.0.6",
+            "id": "syn 3.0.7",
             "target": "syn"
           }
         ],
@@ -2682,7 +2682,7 @@
       ],
       "version": "2.0.119"
     },
-    "syn 3.0.6": {
+    "syn 3.0.7": {
       "common_attrs": {
         "crate_features": [
           "clone-impls",
@@ -2719,8 +2719,8 @@
       "package_url": "https://github.com/dtolnay/syn",
       "repository": {
         "Http": {
-          "sha256": "8593e8e72159ed2257d083c7a454a85cbf854f37a0966d8d483aff8c8a3ebcee",
-          "url": "https://static.crates.io/crates/syn/3.0.6/download"
+          "sha256": "d62a2e0561533f2ca2561d0cf27fd9fedb640a1bf2616ff5d5c80d99017faadc",
+          "url": "https://static.crates.io/crates/syn/3.0.7/download"
         }
       },
       "targets": [
@@ -2731,7 +2731,7 @@
           }
         }
       ],
-      "version": "3.0.6"
+      "version": "3.0.7"
     },
     "tempfile 3.27.0": {
       "common_attrs": {
@@ -2875,7 +2875,7 @@
             "target": "quote"
           },
           {
-            "id": "syn 3.0.6",
+            "id": "syn 3.0.7",
             "target": "syn"
           }
         ],
@@ -3420,7 +3420,7 @@
     "quote 1.0.47",
     "serde 1.0.229",
     "serde_json 1.0.151",
-    "syn 3.0.6",
+    "syn 3.0.7",
     "tokio 1.53.2",
     "toml 1.1.6+spec-1.1.0",
     "yaml_serde 0.10.7"
