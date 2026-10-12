@@ -27,7 +27,7 @@ concurrency:
 jobs:
   repin:
     if: startsWith(github.head_ref, 'renovate/')
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 30
     steps:
       # No credentials on disk while Bazel runs the new dependencies'

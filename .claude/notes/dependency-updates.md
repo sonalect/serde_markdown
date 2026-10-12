@@ -29,7 +29,9 @@ them. Set up 8 October 2026.
 | `buf` (alone) | `buf.toolchains(version)` | `bufbuild/buf` releases |
 | `GitHub Actions` | `.github/workflows/*.yml`, pinned by digest | GitHub |
 
-Not tracked: `rust-version` in `Cargo.toml` (the MSRV is a promise to
+Not tracked: the `runs-on` labels of the workflows (`ubuntu-26.04`,
+`macos-26`, `windows-2025`, ...): move them by hand when GitHub ships a new
+image (list: `actions/runner-images` README); `rust-version` in `Cargo.toml` (the MSRV is a promise to
 consumers, moved by hand); transitive crates (no lock-file maintenance:
 `cargo update` would ignore the quarantine; `cargo audit` and the alerts
 cover vulnerabilities).

@@ -1,11 +1,15 @@
-# The gate of every pull request and of main: the same command
+# `test` is the gate of every pull request and of main: the same command
 # `.claude/rules/commit-after-tests.md` runs before a local commit.
+# `platforms` builds and tests the library on all six supported platforms
+# (Linux, macOS, Windows on amd64 and arm64) when a release tag is pushed,
+# or on demand (workflow_dispatch).
 name: CI
 
 on:
   pull_request:
   push:
     branches: [main]
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -18,7 +22,9 @@ concurrency:
 jobs:
   test:
     name: bazel test
-    runs-on: ubuntu-24.04
+    # A tag runs `platforms`, which includes this platform.
+    if: github.ref_type != 'tag'
+    runs-on: ubuntu-26.04
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -32,3 +38,55 @@ jobs:
           # Pull requests read the caches of main and write none of their own.
           cache-save: ${{ github.event_name != 'pull_request' }}
       - run: bazel test //... --keep_going --test_output=errors
+
+  platforms:
+    name: bazel test (${{ matrix.platform }})
+    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      # One broken platform must not hide the results of the others.
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux-amd64
+            runner: ubuntu-26.04
+          - platform: linux-arm64
+            runner: ubuntu-26.04-arm
+          - platform: macos-amd64
+            runner: macos-26-intel
+          - platform: macos-arm64
+            runner: macos-26
+          - platform: windows-amd64
+            runner: windows-2025
+            # A short output root: Windows MAX_PATH and the crate_universe tree.
+            bazelrc: "startup --output_user_root=C:/b"
+          - platform: windows-arm64
+            runner: windows-11-arm
+            bazelrc: "startup --output_user_root=C:/b"
+    steps:
+      # Keep LF, so buildifier, markdownlint, and the generate check see the
+      # committed bytes.
+      - name: Disable CRLF conversion
+        shell: bash
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
+        with:
+          bazelisk-cache: true
+          bazelrc: ${{ matrix.bazelrc }}
+          disk-cache: ${{ github.workflow }}-${{ matrix.platform }}
+          repository-cache: true
+          # A run reads the caches of its own ref and of main. A tag is built
+          # once and its caches would never be read again (and would evict
+          # useful ones), so only a manual run on main seeds them:
+          # Actions > CI > Run workflow, branch main.
+          cache-save: ${{ github.ref_type != 'tag' }}
+      - run: bazel test //... --keep_going --test_output=errors
+      # Stop the server before the post step saves the caches: on Windows a
+      # live server holds files open and the save fails.
+      - name: Stop Bazel
+        if: always()
+        run: bazel shutdown
