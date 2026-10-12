@@ -8,11 +8,16 @@ build --symlink_prefix=.bazel/
 common --enable_runfiles
 
 # Windows: the C and C++ code of external modules (protobuf, abseil) compiled
-# for the build tools is not ours to fix; keep its compiler warnings out of the log.
-build:windows --per_file_copt=external/.*@/w
-build:windows --host_per_file_copt=external/.*@/w
-# macOS: the Bazel C++ toolchain passes -target <SDK version> to the linker
-# while rustc adds -mmacosx-version-min, and clang warns about the overriding
-# on every crate. The linker's messages are not ours to act on.
+# for the build tools is not ours to fix; keep its three compiler warnings out
+# of the log (C4047 and C4244: conversions, C4715: a missing return). A bare
+# /w would add a D9025 line for every file, as /W3 is already set.
+build:windows --per_file_copt=external/.*@/wd4047,/wd4244,/wd4715
+build:windows --host_per_file_copt=external/.*@/wd4047,/wd4244,/wd4715
+# The linker's messages are not ours to act on: on macOS the Bazel C++
+# toolchain passes -target <SDK version> while rustc adds -mmacosx-version-min,
+# and clang warns about the overriding on every crate; on Windows link.exe
+# reports the import library it creates for every proc macro.
 build:macos --@rules_rust//rust/settings:extra_rustc_flag=-Alinker-messages
 build:macos --@rules_rust//rust/settings:extra_exec_rustc_flag=-Alinker-messages
+build:windows --@rules_rust//rust/settings:extra_rustc_flag=-Alinker-messages
+build:windows --@rules_rust//rust/settings:extra_exec_rustc_flag=-Alinker-messages
