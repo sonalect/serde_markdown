@@ -1,8 +1,7 @@
-# `test` is the gate of every pull request and of main: the same command
+# The gate of every pull request, of main, and of every release tag: builds
+# and tests the library on all six supported platforms (Linux, macOS, Windows;
+# amd64 and arm64) with `bazel test //...`, the same command
 # `.claude/rules/commit-after-tests.md` runs before a local commit.
-# `platforms` builds and tests the library on all six supported platforms
-# (Linux, macOS, Windows on amd64 and arm64) when a release tag is pushed,
-# or on demand (workflow_dispatch).
 name: CI
 
 on:
@@ -20,28 +19,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: bazel test
-    # A tag runs `platforms`, which includes this platform.
-    if: github.ref_type != 'tag'
-    runs-on: ubuntu-26.04
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: bazel-contrib/setup-bazel@c5acdfb288317d0b5c0bbd7a396a3dc868bb0f86 # 0.19.0
-        with:
-          bazelisk-cache: true
-          disk-cache: ${{ github.workflow }}
-          repository-cache: true
-          # Pull requests read the caches of main and write none of their own.
-          cache-save: ${{ github.event_name != 'pull_request' }}
-      - run: bazel test //... --keep_going --test_output=errors
-
   platforms:
     name: bazel test (${{ matrix.platform }})
-    if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     strategy:
@@ -79,11 +58,10 @@ jobs:
           bazelrc: ${{ matrix.bazelrc }}
           disk-cache: ${{ github.workflow }}-${{ matrix.platform }}
           repository-cache: true
-          # A run reads the caches of its own ref and of main. A tag is built
-          # once and its caches would never be read again (and would evict
-          # useful ones), so only a manual run on main seeds them:
-          # Actions > CI > Run workflow, branch main.
-          cache-save: ${{ github.ref_type != 'tag' }}
+          # A run reads the caches of its own ref and of main. Only main and
+          # manual runs save them: a tag or a pull request is built once, its
+          # caches would never be read again and would evict useful ones.
+          cache-save: ${{ github.ref_type != 'tag' && github.event_name != 'pull_request' }}
       - run: bazel test //... --keep_going --test_output=errors
       # Stop the server before the post step saves the caches: on Windows a
       # live server holds files open and the save fails.

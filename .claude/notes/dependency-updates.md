@@ -7,8 +7,9 @@ them. Set up 8 October 2026.
 
 - `.github/renovate.json5`: what Renovate tracks, the groups, the schedule,
   the 2-day quarantine (`dependency-quarantine.md`).
-- `.github/workflows/ci.yml`: `bazel test //...` on every pull request and
-  on main.
+- `.github/workflows/ci.yml`: `bazel test //...` on the six platforms (Linux,
+  macOS, Windows; amd64 and arm64) on every pull request, on main, and on every
+  `v*` tag.
 - `.github/workflows/repin.yml`: on a `renovate/` branch, repins
   `cargo-bazel-lock.json` and `MODULE.bazel.lock` and pushes them with the
   secret `REPIN_TOKEN` (fine-grained token, Contents read and write on this
