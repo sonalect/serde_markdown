@@ -69,9 +69,12 @@
   ],
   packageRules: [
     {
-      // The crates are pinned with `=`: a bump moves the pin, not only the lock.
+      // Cargo.toml has caret ranges (the crates are published); an update
+      // moves Cargo.lock inside the range and Cargo.toml only for a version
+      // out of it, so the floor a consumer sees does not climb on every
+      // release (.claude/rules/dependency-quarantine.md).
       matchManagers: ['cargo'],
-      rangeStrategy: 'bump',
+      rangeStrategy: 'update-lockfile',
       prBodyNotes: [
         'No `CHANGELOG.md` edit here: moves of the dependencies of `serde_markdown` and `serde_markdown_derive` are written at release (`.claude/skills/versioning/SKILL.md`, "Dependency moves").',
       ],

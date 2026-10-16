@@ -7,6 +7,15 @@ license.workspace = true
 repository.workspace = true
 description = "Serde format crate: Rust structs to and from Markdown documents"
 readme = "../../README.md"
+keywords = ["serde", "markdown", "frontmatter", "yaml", "protobuf"]
+categories = ["encoding", "parser-implementations", "text-processing"]
+# proto/ ships markdown/options.proto (PROTO_INCLUDE); testdata/ lets
+# `cargo test` run from the published crate.
+exclude = ["BUILD.bazel"]
+
+# docs.rs documents every feature: the buffa and tokio modules too.
+[package.metadata.docs.rs]
+all-features = true
 
 [features]
 default = ["yaml", "json", "toml", "derive"]

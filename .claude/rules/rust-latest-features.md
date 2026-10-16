@@ -6,7 +6,10 @@ paths:
 # Latest Rust features
 
 Workspace floor is `[workspace.package] rust-version` and `edition` in the
-root `Cargo.toml`. Write for that compiler. Do not write as if MSRV were an
+root `Cargo.toml` (1.88 since 16 October 2026, the oldest rustc that builds
+and tests the published crates), not the newer pinned toolchain. Write for
+that compiler: CI builds and tests with it, and clippy's
+`incompatible_msrv` flags a newer std API. Do not write as if MSRV were an
 older rustc from training data.
 
 When writing or changing Rust, **look up** language, std, and Cargo features

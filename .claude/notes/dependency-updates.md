@@ -22,7 +22,7 @@ them. Set up 8 October 2026.
 
 | Group | Files | Source |
 | - | - | - |
-| one PR per crate | `Cargo.toml`, `Cargo.lock` | crates.io |
+| one PR per crate | `Cargo.lock` within the `Cargo.toml` range; `Cargo.toml` only for a version out of it | crates.io |
 | `buffa` | the buffa crates, the two `protoc-gen-buffa*` in `buf.MODULE.bazel` | crates.io, `anthropics/buffa` releases |
 | `Bazel tooling` | `bazel_dep` in `MODULE.bazel`, `.bazelversion` | BCR, Bazel releases |
 | `bazel_utils` | every `bazel_dep` and `git_override` tag of it | `sonalect/bazel_utils` tags, no quarantine |

@@ -6,6 +6,10 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 description = "Derive macro for serde_markdown::Markdown"
+readme = "../../README.md"
+keywords = ["serde", "markdown", "derive"]
+categories = ["encoding"]
+exclude = ["BUILD.bazel"]
 
 [lib]
 proc-macro = true

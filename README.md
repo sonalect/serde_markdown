@@ -1,5 +1,9 @@
 # serde_markdown
 
+[![crates.io](https://img.shields.io/crates/v/serde_markdown.svg)](https://crates.io/crates/serde_markdown)
+[![docs.rs](https://docs.rs/serde_markdown/badge.svg)](https://docs.rs/serde_markdown)
+[![License](https://img.shields.io/crates/l/serde_markdown.svg)](https://github.com/sonalect/serde_markdown/blob/main/LICENSE)
+
 A Serde format for Markdown documents with a structured fields block and
 ordered body sections. A struct's ordinary fields go into a YAML, JSON, or TOML
 block at the top of the document; the fields you mark as body become Markdown
@@ -7,21 +11,18 @@ sections after it. It works for hand-written structs and for
 [buffa](https://github.com/anthropics/buffa) protobuf messages, and it has a
 native async form for tokio.
 
-The complete mapping is in [DESIGN.md](DESIGN.md); changes are in
-[CHANGELOG.md](CHANGELOG.md).
+The complete mapping is in [DESIGN.md](https://github.com/sonalect/serde_markdown/blob/main/DESIGN.md); changes are in
+[CHANGELOG.md](https://github.com/sonalect/serde_markdown/blob/main/CHANGELOG.md).
 
 ## Use
-
-Depend on a release tag:
 
 ```toml
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_markdown = { git = "https://github.com/sonalect/serde_markdown", tag = "vX.Y.Z" }
+serde_markdown = "0.5"
 ```
 
-Replace `vX.Y.Z` with a [release](https://github.com/sonalect/serde_markdown/releases).
-The optional parts are [features](#features).
+The optional parts are [features](#features). It needs Rust 1.88 or newer.
 
 ## Quick start
 
@@ -187,7 +188,7 @@ every function, under the same name, with the same arguments, the same
 document, and the same errors.
 
 ```toml
-serde_markdown = { git = "https://github.com/sonalect/serde_markdown", tag = "vX.Y.Z", features = ["tokio"] }
+serde_markdown = { version = "0.5", features = ["tokio"] }
 ```
 
 | Sync, `serde_markdown::` | Async, `serde_markdown::tokio::` |
@@ -244,7 +245,7 @@ How the async form runs:
   value is `Sync`, and can run in `tokio::spawn` or a `JoinSet`.
 
 The library turns on the tokio features it needs (`rt`, `io-util`); the
-runtime is yours. [`rust/examples/tokio`](rust/examples/tokio) is a runnable
+runtime is yours. [`rust/examples/tokio`](https://github.com/sonalect/serde_markdown/tree/main/rust/examples/tokio) is a runnable
 program: a file round-trip over `tokio::fs` and pages written in parallel
 tasks.
 
@@ -273,7 +274,7 @@ Pass them to `buffa_build` in a build script, with
 `serde_markdown::PROTO_INCLUDE` as an include path and `generate_json(true)`
 (body field names are the proto3 JSON names). The generated messages then go
 through `to_string` and `from_str` like any struct.
-[`rust/examples/protobuf/build.rs`](rust/examples/protobuf/build.rs) is a
+[`rust/examples/protobuf/build.rs`](https://github.com/sonalect/serde_markdown/blob/main/rust/examples/protobuf/build.rs) is a
 complete build script.
 
 ### The option in Bazel
@@ -314,7 +315,7 @@ Repin the crate_universe lockfile after adding the annotation.
 `serde_markdown::PROTO_INCLUDE` is for Cargo builds. Under Bazel it holds an
 execution-root path fixed at compile time, not a directory a build script can
 rely on; a Bazel build script takes the directory from the annotated filegroup
-instead, as [`rust/examples/protobuf/BUILD.bazel`](rust/examples/protobuf/BUILD.bazel)
+instead, as [`rust/examples/protobuf/BUILD.bazel`](https://github.com/sonalect/serde_markdown/blob/main/rust/examples/protobuf/BUILD.bazel)
 does with the environment variable `SERDE_MARKDOWN_PROTO_INCLUDE`.
 
 ## Features
@@ -334,7 +335,7 @@ read as the body.
 
 ## Examples
 
-Three runnable programs in [`rust/examples`](rust/examples):
+Three runnable programs in [`rust/examples`](https://github.com/sonalect/serde_markdown/tree/main/rust/examples):
 
 - `example-page`: a hand-written struct, written and read back;
 - `example-protobuf`: a protobuf message compiled by its build script, the
@@ -355,15 +356,15 @@ bazel run //rust/examples/tokio
 
 | Path | What |
 | --- | --- |
-| [`rust/markdown`](rust/markdown) | the crate `serde_markdown` |
-| [`rust/markdown/proto`](rust/markdown/proto) | the `(markdown.body)` option, shipped inside the crate |
-| [`rust/markdown/testdata`](rust/markdown/testdata) | golden Markdown documents |
-| [`rust/markdown_derive`](rust/markdown_derive) | `#[derive(Markdown)]` |
-| [`proto/markdown/testdata`](proto/markdown/testdata) | fixture messages of the tests (not public API) |
-| [`rust/proto`](rust/proto) | their generated buffa code |
-| [`rust/examples`](rust/examples) | the runnable examples |
-| [`DESIGN.md`](DESIGN.md) | the mapping, the API, Bazel and Buf |
-| [`ROADMAP.md`](ROADMAP.md) | work stages M0–M16 |
+| [`rust/markdown`](https://github.com/sonalect/serde_markdown/tree/main/rust/markdown) | the crate `serde_markdown` |
+| [`rust/markdown/proto`](https://github.com/sonalect/serde_markdown/tree/main/rust/markdown/proto) | the `(markdown.body)` option, shipped inside the crate |
+| [`rust/markdown/testdata`](https://github.com/sonalect/serde_markdown/tree/main/rust/markdown/testdata) | golden Markdown documents |
+| [`rust/markdown_derive`](https://github.com/sonalect/serde_markdown/tree/main/rust/markdown_derive) | `#[derive(Markdown)]` |
+| [`proto/markdown/testdata`](https://github.com/sonalect/serde_markdown/tree/main/proto/markdown/testdata) | fixture messages of the tests (not public API) |
+| [`rust/proto`](https://github.com/sonalect/serde_markdown/tree/main/rust/proto) | their generated buffa code |
+| [`rust/examples`](https://github.com/sonalect/serde_markdown/tree/main/rust/examples) | the runnable examples |
+| [`DESIGN.md`](https://github.com/sonalect/serde_markdown/blob/main/DESIGN.md) | the mapping, the API, Bazel and Buf |
+| [`ROADMAP.md`](https://github.com/sonalect/serde_markdown/blob/main/ROADMAP.md) | work stages M0–M16 |
 
 The fast loop, and the gate before a commit (tests, clippy, cargo audit,
 buf lint, the generate check, buildifier, markdownlint):
@@ -389,9 +390,9 @@ bazel run //proto/markdown:format  # buf format
 bazel run //bazel:format           # buildifier
 ```
 
-Buf ships the well-known types, so [`buf.yaml`](buf.yaml) has no dependencies.
+Buf ships the well-known types, so [`buf.yaml`](https://github.com/sonalect/serde_markdown/blob/main/buf.yaml) has no dependencies.
 It lists `rust/markdown/proto`, `proto/`, and `rust/examples/protobuf/proto`,
 so the Buf language server resolves `import "markdown/options.proto"`;
-[`buf.gen.rust.yaml`](buf.gen.rust.yaml) generates `proto/` only.
+[`buf.gen.rust.yaml`](https://github.com/sonalect/serde_markdown/blob/main/buf.gen.rust.yaml) generates `proto/` only.
 `example-protobuf` compiles its proto in `build.rs` with `protoc`; Bazel takes
 the prebuilt protoc of the protobuf toolchain.

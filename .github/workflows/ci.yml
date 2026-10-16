@@ -68,3 +68,31 @@ jobs:
       - name: Stop Bazel
         if: always()
         run: bazel shutdown
+
+  # The published crates must build and test with the declared
+  # `rust-version`, older than the pinned toolchain. Cargo only, on one
+  # platform: the code is the same on all.
+  msrv:
+    name: Minimum Rust version
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The version comes from Cargo.toml, so the check cannot drift from
+      # the declared floor. `+<version>` overrides rust-toolchain.toml.
+      - name: Build and test with the minimum Rust version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v rustup >/dev/null; then
+            curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+            export PATH="${HOME}/.cargo/bin:${PATH}"
+          fi
+          msrv="$(sed -n 's/^rust-version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          test -n "${msrv}"
+          echo "rust-version ${msrv}"
+          rustup toolchain install "${msrv}" --profile minimal
+          cargo "+${msrv}" check --locked -p serde_markdown --no-default-features
+          cargo "+${msrv}" test --locked -p serde_markdown -p serde_markdown_derive --all-features

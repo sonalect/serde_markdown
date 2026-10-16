@@ -56,10 +56,13 @@ consumers:
 git diff "vPREVIOUS" HEAD -- Cargo.toml rust/markdown/Cargo.toml rust/markdown_derive/Cargo.toml
 ```
 
-Every `=` pin that moved, for a crate `serde_markdown` or
-`serde_markdown_derive` lists under `[dependencies]` (an optional one
-included), goes into one `### Changed` line: `` Dependencies: `serde`
-=1.0.230, `toml` =1.1.7. `` Crates only the examples, tests, or
+The dependencies are caret ranges, and a consumer resolves its own
+versions, so what moved for it is a raised lower bound: every range whose
+floor moved, for a crate `serde_markdown` or `serde_markdown_derive` lists
+under `[dependencies]` (an optional one included), goes into one
+`### Changed` line: `` Dependencies: at least `serde` 1.0.230, `toml`
+1.1.7. `` A move of `Cargo.lock` alone changes nothing for a consumer and
+stays out. Crates only the examples, tests, or
 `serde_markdown-proto` use, and tooling (Bazel, `bazel_utils`, buf, the
 protoc plugins, the Rust toolchain, GitHub Actions), stay out. A major
 move of a crate whose types the public API exposes (`buffa`, `serde`) is
@@ -75,6 +78,13 @@ Set the same `MAJOR.MINOR.PATCH` everywhere:
 - `CHANGELOG.md`: move `## [Unreleased]` notes into `## [MAJOR.MINOR.PATCH] -
   YYYY-MM-DD`; add the version to `## Links` and the reference definitions
   (`[Unreleased]` compare from the new tag, `[MAJOR.MINOR.PATCH]` release URL)
+
+- Root `Cargo.toml`: the exact version of `serde_markdown_derive` in
+  `[workspace.dependencies]` (`version = "=MAJOR.MINOR.PATCH"`): the
+  published library requires its own derive.
+- `README.md`: the `serde_markdown = "…"` examples name the compatible
+  range, `MAJOR.MINOR` while major is 0 (`"0.5"`), `MAJOR` after; change
+  them only when a release leaves that range.
 
 Refresh `Cargo.lock`, `cargo-bazel-lock.json`
 (`.claude/rules/cargo-bazel-lock.md`), and `MODULE.bazel.lock` if they
@@ -115,5 +125,25 @@ rm -f "$notes"
 
 Run `git` / `gh` from the clone root with unrestricted permissions. Return
 the Release URL when it succeeds.
+
+## Publish on crates.io
+
+When the GitHub Release is published, the owner publishes both crates from
+the tag in one call. Cargo orders them (the derive first, the library
+requires it) and, in the dry run, checks the library against the local
+derive, which a separate dry run of the library could not find on
+crates.io:
+
+```bash
+git checkout vMAJOR.MINOR.PATCH
+cargo publish --locked --dry-run -p serde_markdown_derive -p serde_markdown
+cargo publish --locked -p serde_markdown_derive -p serde_markdown
+git checkout main
+```
+
+It needs the owner's crates.io token (`cargo login`); do not run the
+publish itself. A published version can only be yanked, never replaced,
+so a release with a problem gets a new patch version. State and next
+steps: `.claude/notes/crates-io-publish.md`.
 
 Examples: `v0.1.0`, `v0.1.1`, `v0.2.0`.

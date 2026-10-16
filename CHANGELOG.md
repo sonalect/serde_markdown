@@ -8,9 +8,30 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+### Added
+
+- Ready for crates.io: keywords, categories, and the license text in both
+  packages, a README for `serde_markdown_derive`, and docs.rs builds
+  `serde_markdown` with every feature (the `buffa` and `tokio` modules).
+  `serde_markdown` requires its own `serde_markdown_derive` by exact
+  version.
+- CI builds and tests `serde_markdown` and `serde_markdown_derive` with
+  the minimum Rust version, read from `rust-version`.
+
 ### Changed
 
-- Dependencies: `serde_json` =1.0.154, `syn` =3.0.9, `tokio` =1.53.3.
+- The minimum Rust version (`rust-version`) is 1.88 (it was 1.99.0), the
+  oldest rustc that builds and tests the published crates.
+- The workspace takes its dependencies as caret ranges instead of exact
+  pins (`serde = "1.0.229"`, was `"=1.0.229"`), so a consumer is not held to
+  one version of serde, buffa, tokio, or the format crates. `Cargo.lock`
+  still fixes the versions this repository builds and tests; Renovate moves
+  it within the ranges.
+- The README takes `serde_markdown` from crates.io
+  (`serde_markdown = "0.5"`) and links to GitHub by absolute URLs.
+
+- Dependencies: at least `serde_json` 1.0.154, `syn` 3.0.9, and `tokio`
+  1.53.3.
 - Tooling: `bazel_utils_*` v0.4.0, Buf CLI v1.74.0, and
   `bazel-contrib/setup-bazel` 0.19.1 in CI. Buildifier, markdownlint, buf
   lint, and cargo audit now also run on Windows (amd64 and arm64), so every

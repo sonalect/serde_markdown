@@ -6,6 +6,7 @@ before planning; open a note when its topic comes up.
 
 | Note | What it holds |
 | - | - |
+| `crates-io-publish.md` | Publishing `serde_markdown` and its derive on crates.io: what is done, the first publish by the owner, what follows |
 | `dependency-updates.md` | Renovate, CI, and the repin workflow: what is tracked, the trial schedule, what to watch |
 
 ## References
