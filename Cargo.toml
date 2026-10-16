@@ -33,9 +33,9 @@ proc-macro2 = "=1.0.107"
 pulldown-cmark = "=0.13.4"
 quote = "=1.0.47"
 serde = { version = "=1.0.229", features = ["derive"] }
-serde_json = "=1.0.151"
-syn = "=3.0.7"
-tokio = { version = "=1.53.2", default-features = false }
+serde_json = "=1.0.154"
+syn = "=3.0.9"
+tokio = { version = "=1.53.3", default-features = false }
 toml = "=1.1.8"
 yaml_serde = "=0.10.7"
 

@@ -1,5 +1,4 @@
 load("@rules_rust//rust:defs.bzl", "rust_doc_test", "rust_library", "rust_test")
-load("//bazel:compat.bzl", "NOT_WINDOWS")
 
 exports_files(["Cargo.toml"])
 
@@ -74,9 +73,6 @@ rust_test(
     ],
 )
 
-# rustdoc looks up the standard library by a relative path inside the Rust
-# toolchain repository, and on Windows the linker cannot open it (LNK1181).
-# Linux and macOS CI still run the doc tests.
 rust_doc_test(
     name = "serde_markdown_doc_test",
     size = "small",
@@ -89,7 +85,6 @@ rust_doc_test(
         "toml",
         "yaml",
     ],
-    target_compatible_with = NOT_WINDOWS,
     deps = [
         "@serde_markdown_cargo//:serde",
         "@serde_markdown_cargo//:tokio",

@@ -1,5 +1,5 @@
 {
-  "checksum": "d4f588c65cb3e9af5d8a2c90209d4f2cbeb02945338c0122759fefed336e4fb2",
+  "checksum": "3fca7033dfbbcff394032bc4168bc5763bfaf4ab9ddf2b3afc9d36617c8ca46a",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -207,7 +207,7 @@
             "target": "serde"
           },
           {
-            "id": "serde_json 1.0.151",
+            "id": "serde_json 1.0.154",
             "target": "serde_json"
           },
           {
@@ -413,7 +413,7 @@
             "target": "serde"
           },
           {
-            "id": "serde_json 1.0.151",
+            "id": "serde_json 1.0.154",
             "target": "serde_json"
           },
           {
@@ -798,7 +798,7 @@
             "target": "serde"
           },
           {
-            "id": "serde_json 1.0.151",
+            "id": "serde_json 1.0.154",
             "target": "serde_json"
           }
         ],
@@ -839,7 +839,7 @@
             "target": "serde"
           },
           {
-            "id": "tokio 1.53.2",
+            "id": "tokio 1.53.3",
             "target": "tokio"
           }
         ],
@@ -2261,7 +2261,7 @@
             "target": "quote"
           },
           {
-            "id": "syn 3.0.7",
+            "id": "syn 3.0.9",
             "target": "syn"
           }
         ],
@@ -2292,7 +2292,7 @@
       ],
       "version": "1.0.229"
     },
-    "serde_json 1.0.151": {
+    "serde_json 1.0.154": {
       "build_script_attrs": {},
       "common_attrs": {
         "crate_features": [
@@ -2344,8 +2344,8 @@
       "package_url": "https://github.com/serde-rs/json",
       "repository": {
         "Http": {
-          "sha256": "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14",
-          "url": "https://static.crates.io/crates/serde_json/1.0.151/download"
+          "sha256": "e7e9cc8b1b85264074fbcc02a88680c4096b1e47df8f739dceb03bf482f04bd6",
+          "url": "https://static.crates.io/crates/serde_json/1.0.154/download"
         }
       },
       "targets": [
@@ -2362,7 +2362,7 @@
           }
         }
       ],
-      "version": "1.0.151"
+      "version": "1.0.154"
     },
     "serde_markdown 0.5.0": {
       "common_attrs": {
@@ -2397,11 +2397,11 @@
             "target": "serde"
           },
           {
-            "id": "serde_json 1.0.151",
+            "id": "serde_json 1.0.154",
             "target": "serde_json"
           },
           {
-            "id": "tokio 1.53.2",
+            "id": "tokio 1.53.3",
             "target": "tokio"
           },
           {
@@ -2449,7 +2449,7 @@
             "target": "serde"
           },
           {
-            "id": "serde_json 1.0.151",
+            "id": "serde_json 1.0.154",
             "target": "serde_json"
           }
         ],
@@ -2485,7 +2485,7 @@
             "target": "quote"
           },
           {
-            "id": "syn 3.0.7",
+            "id": "syn 3.0.9",
             "target": "syn"
           }
         ],
@@ -2671,7 +2671,7 @@
       ],
       "version": "2.0.119"
     },
-    "syn 3.0.7": {
+    "syn 3.0.9": {
       "common_attrs": {
         "crate_features": [
           "clone-impls",
@@ -2708,8 +2708,8 @@
       "package_url": "https://github.com/dtolnay/syn",
       "repository": {
         "Http": {
-          "sha256": "d62a2e0561533f2ca2561d0cf27fd9fedb640a1bf2616ff5d5c80d99017faadc",
-          "url": "https://static.crates.io/crates/syn/3.0.7/download"
+          "sha256": "d78c8dee4c7bf0e14673097256fed6142ce9d3b85a408189d07482442145823b",
+          "url": "https://static.crates.io/crates/syn/3.0.9/download"
         }
       },
       "targets": [
@@ -2720,7 +2720,7 @@
           }
         }
       ],
-      "version": "3.0.7"
+      "version": "3.0.9"
     },
     "tempfile 3.27.0": {
       "common_attrs": {
@@ -2846,7 +2846,7 @@
             "target": "quote"
           },
           {
-            "id": "syn 3.0.7",
+            "id": "syn 3.0.9",
             "target": "syn"
           }
         ],
@@ -2877,7 +2877,7 @@
       ],
       "version": "2.0.21"
     },
-    "tokio 1.53.2": {
+    "tokio 1.53.3": {
       "common_attrs": {
         "crate_features": [
           "bytes",
@@ -2908,8 +2908,8 @@
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "sha256": "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044",
-          "url": "https://static.crates.io/crates/tokio/1.53.2/download"
+          "sha256": "ce3335fa71841cda333a58d7615b03901380ecf09d59b3296d21f8bbac0dde4e",
+          "url": "https://static.crates.io/crates/tokio/1.53.3/download"
         }
       },
       "targets": [
@@ -2920,7 +2920,7 @@
           }
         }
       ],
-      "version": "1.53.2"
+      "version": "1.53.3"
     },
     "toml 1.1.8+spec-1.1.0": {
       "common_attrs": {
@@ -3390,9 +3390,9 @@
     "pulldown-cmark 0.13.4",
     "quote 1.0.47",
     "serde 1.0.229",
-    "serde_json 1.0.151",
-    "syn 3.0.7",
-    "tokio 1.53.2",
+    "serde_json 1.0.154",
+    "syn 3.0.9",
+    "tokio 1.53.3",
     "toml 1.1.8+spec-1.1.0",
     "yaml_serde 0.10.7"
   ],

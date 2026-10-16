@@ -1,6 +1,5 @@
 load("@bazel_utils_rust//:rust.bzl", "cargo_audit_test")
 load("@rules_rust//rust:defs.bzl", "rust_clippy_test")
-load("//bazel:compat.bzl", "NOT_WINDOWS")
 
 rust_clippy_test(
     name = "lint",
@@ -22,15 +21,15 @@ rust_clippy_test(
         "//rust/markdown:serde_markdown_buffa_only_test",
         "//rust/markdown:serde_markdown_minimal",
         "//rust/markdown:serde_markdown_minimal_test",
-        "//rust/markdown:serde_markdown_test",
-        "//rust/markdown:serde_markdown_tokio_only",
-        "//rust/markdown:serde_markdown_tokio_only_test",
         "//rust/markdown:serde_markdown_no_json",
         "//rust/markdown:serde_markdown_no_json_test",
         "//rust/markdown:serde_markdown_no_toml",
         "//rust/markdown:serde_markdown_no_toml_test",
         "//rust/markdown:serde_markdown_no_yaml",
         "//rust/markdown:serde_markdown_no_yaml_test",
+        "//rust/markdown:serde_markdown_test",
+        "//rust/markdown:serde_markdown_tokio_only",
+        "//rust/markdown:serde_markdown_tokio_only_test",
         "//rust/markdown_derive:serde_markdown_derive",
     ],
 )
@@ -38,5 +37,4 @@ rust_clippy_test(
 cargo_audit_test(
     name = "vuln",
     size = "small",
-    target_compatible_with = NOT_WINDOWS,
 )
