@@ -1,5 +1,5 @@
 {
-  "checksum": "d4f588c65cb3e9af5d8a2c90209d4f2cbeb02945338c0122759fefed336e4fb2",
+  "checksum": "3e65037d30a0f4d120c81bb7c1b7e5be994e34f84d97643a37d1119e564ac8ca",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -839,7 +839,7 @@
             "target": "serde"
           },
           {
-            "id": "tokio 1.53.2",
+            "id": "tokio 1.53.3",
             "target": "tokio"
           }
         ],
@@ -2401,7 +2401,7 @@
             "target": "serde_json"
           },
           {
-            "id": "tokio 1.53.2",
+            "id": "tokio 1.53.3",
             "target": "tokio"
           },
           {
@@ -2877,7 +2877,7 @@
       ],
       "version": "2.0.21"
     },
-    "tokio 1.53.2": {
+    "tokio 1.53.3": {
       "common_attrs": {
         "crate_features": [
           "bytes",
@@ -2908,8 +2908,8 @@
       "package_url": "https://github.com/tokio-rs/tokio",
       "repository": {
         "Http": {
-          "sha256": "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044",
-          "url": "https://static.crates.io/crates/tokio/1.53.2/download"
+          "sha256": "ce3335fa71841cda333a58d7615b03901380ecf09d59b3296d21f8bbac0dde4e",
+          "url": "https://static.crates.io/crates/tokio/1.53.3/download"
         }
       },
       "targets": [
@@ -2920,7 +2920,7 @@
           }
         }
       ],
-      "version": "1.53.2"
+      "version": "1.53.3"
     },
     "toml 1.1.8+spec-1.1.0": {
       "common_attrs": {
@@ -3392,7 +3392,7 @@
     "serde 1.0.229",
     "serde_json 1.0.151",
     "syn 3.0.7",
-    "tokio 1.53.2",
+    "tokio 1.53.3",
     "toml 1.1.8+spec-1.1.0",
     "yaml_serde 0.10.7"
   ],
