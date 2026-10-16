@@ -1,10 +1,13 @@
 # Publishing to crates.io
 
-The owner decided on 16 October 2026 to publish `serde_markdown` and
-`serde_markdown_derive` on crates.io. Nothing is published yet; consumers
-take the library as a git dependency on a tag.
+Published on 16 October 2026 by the owner, by hand with a crates.io token
+(`cargo publish -p serde_markdown_derive -p serde_markdown` from the tag
+`v0.5.1`): [`serde_markdown`](https://crates.io/crates/serde_markdown) and
+[`serde_markdown_derive`](https://crates.io/crates/serde_markdown_derive)
+0.5.1, owned by the owner's GitHub account. Every release publishes both
+by hand: "Publish on crates.io" in `.claude/skills/versioning/SKILL.md`.
 
-## Done (16 October 2026, Unreleased)
+## What the publish needed (in the tree since 0.5.1)
 
 - Both names were free on crates.io (`serde_markdown`,
   `serde_markdown_derive`; also `serde_markdown-proto` and
@@ -34,14 +37,13 @@ take the library as a git dependency on a tag.
 
 ## Still to do
 
-1. **First publish, by the owner** (the crates.io token from the owner's
-   account, as for protocontract-buffa): release the next version, then the
-   "Publish on crates.io" step of the versioning skill on its tag.
-   `cargo publish -p serde_markdown_derive -p serde_markdown` publishes both
-   in order; a separate dry run of the library fails until the derive is on
-   crates.io.
-2. **Knowqore** moves from the git tag to `serde_markdown = "0.5"`
+1. **Knowqore** moves from the git tag to `serde_markdown = "0.5"`
    (`.claude/rules/consumers.md`).
-3. **Trusted Publishing** for later releases, once the crates exist.
+2. **Trusted Publishing**, so the CI publishes instead of the owner:
+   configure it in each crate's crates.io settings (repository
+   `sonalect/serde_markdown`), then a publish job on `v*` tags with
+   `id-token: write` and the crates.io auth action pinned by commit SHA.
+3. The README's shields.io badges cache a crate's answer for one and four
+   hours: a badge loaded before the publish shows "not found" until then.
 
 **Why:** the next publish starts from this state.
