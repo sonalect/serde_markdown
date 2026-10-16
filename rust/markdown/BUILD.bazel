@@ -73,6 +73,12 @@ rust_test(
     ],
 )
 
+# Not on Windows: rules_rust's rust_doc_test compiles the doc tests while the
+# test runs, from its runfiles, where the Windows runner makes `external` a
+# symbolic link to `..\`; link.exe cannot open the standard library's rlibs
+# through it (LNK1181). Building them ahead of time
+# (`experimental_compile_rustdoc_tests`) needs a nightly toolchain. The same
+# code is covered by the unit tests on Windows.
 rust_doc_test(
     name = "serde_markdown_doc_test",
     size = "small",
@@ -85,6 +91,10 @@ rust_doc_test(
         "toml",
         "yaml",
     ],
+    target_compatible_with = select({
+        "@platforms//os:windows": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
     deps = [
         "@serde_markdown_cargo//:serde",
         "@serde_markdown_cargo//:tokio",

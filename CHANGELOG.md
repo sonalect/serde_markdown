@@ -13,8 +13,9 @@ API changes bump the minor.
 - Dependencies: `serde_json` =1.0.154, `syn` =3.0.9, `tokio` =1.53.3.
 - Tooling: `bazel_utils_*` v0.4.0, Buf CLI v1.74.0, and
   `bazel-contrib/setup-bazel` 0.19.1 in CI. Buildifier, markdownlint, buf
-  lint, cargo audit, and the doc tests now also run on Windows (amd64 and
-  arm64), so every test runs on all six CI platforms.
+  lint, and cargo audit now also run on Windows (amd64 and arm64), so every
+  test but the doc tests runs on all six CI platforms; rules_rust cannot link
+  doc tests on Windows (LNK1181).
 
 ## [0.5.0] - 2026-10-16
 
