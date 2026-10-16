@@ -10,9 +10,13 @@ use serde_json::Value;
 
 use crate::drive::{self, Steps};
 use crate::error::Error;
+use crate::finite::find_non_finite;
 use crate::format::{self, FieldsLayout, Format};
 use crate::markdown::Markdown;
-use crate::parse::{SEPARATOR, check_middle_section, starts_with_dash_rule, would_read_fields};
+use crate::parse::{
+    EMPTY_STRING_SECTION, Fields, SEPARATOR, check_middle_section, may_be_list, parse,
+    starts_with_dash_rule, would_read_fields,
+};
 
 /// Serialize `value` as a fenced YAML Markdown document.
 ///
@@ -44,6 +48,15 @@ use crate::parse::{SEPARATOR, check_middle_section, starts_with_dash_rule, would
 /// document with no fields whose body a reader would take for fields starts with
 /// an explicit empty fields block.
 ///
+/// The fields fence is three backticks, or one more than the longest run of
+/// backticks that starts a line of the encoded fields, so a value holding a
+/// fence line cannot close it. A value that cannot be written is
+/// [`crate::ErrorKind::FrontMatter`] with no source: a number that is not
+/// finite (`NaN`, an infinity), or fields that a reader would not read back
+/// as written. A structured body section holding a non-finite number is
+/// [`crate::ErrorKind::Body`]. A `Markdown::BODY_FIELDS` name that the value
+/// never serializes (not even skipped) is [`crate::ErrorKind::Type`].
+///
 /// [`to_vec`] is these UTF-8 bytes. [`to_writer`] writes the same document.
 pub fn to_string<T: Serialize + Markdown>(value: &T) -> Result<String, Error> {
     to_string_with(value, Format::Yaml, FieldsLayout::Fenced)
@@ -68,6 +81,15 @@ pub fn to_string_with_format<T: Serialize + Markdown>(
 /// [`FieldsLayout::Fenced`] wraps fields in a labeled code block.
 /// [`FieldsLayout::Bare`] writes the mapping with no fence and a `---`
 /// separator before the first body section. [`to_string`] is YAML and fenced.
+///
+/// Fields that encode to nothing (every field absent in TOML) are not
+/// written, and the document has no fields block. A bare block that a
+/// reader would not read back as written (a string value with a `---`,
+/// fence, or HTML comment line in it, say) is
+/// [`crate::ErrorKind::FrontMatter`]; write that value with
+/// [`FieldsLayout::Fenced`]. A body-only document that needs an explicit
+/// empty fields block in a language the build lacks is
+/// [`crate::ErrorKind::FormatDisabled`].
 pub fn to_string_with<T: Serialize + Markdown>(
     value: &T,
     format: Format,
@@ -134,6 +156,11 @@ impl<T: Serialize + ?Sized> Steps for WriteDoc<'_, T> {
                         body_fields: self.body_fields,
                         len: captured.front_len,
                     };
+                    if let Some(number) = find_non_finite(&front) {
+                        return Err(Error::front_matter_message(format_args!(
+                            "the number {number} is not finite, which a fields block cannot hold"
+                        )));
+                    }
                     Some(format::dump(&front, self.format)?)
                 } else {
                     None
@@ -202,7 +229,7 @@ where
 struct Captured {
     /// Number of root fields that are not body fields.
     front_len: usize,
-    body: HashMap<String, BodyValue>,
+    body: HashMap<&'static str, BodyValue>,
 }
 
 enum BodyValue {
@@ -382,6 +409,7 @@ impl Serializer for RootSerializer {
             format: self.format,
             front_len: 0,
             body: HashMap::new(),
+            seen_body: Vec::new(),
         })
     }
 
@@ -400,7 +428,9 @@ struct StructSerializer {
     body_fields: &'static [&'static str],
     format: Format,
     front_len: usize,
-    body: HashMap<String, BodyValue>,
+    body: HashMap<&'static str, BodyValue>,
+    /// The body fields the value has named so far, set or skipped.
+    seen_body: Vec<&'static str>,
 }
 
 impl SerializeStruct for StructSerializer {
@@ -413,8 +443,9 @@ impl SerializeStruct for StructSerializer {
         value: &T,
     ) -> Result<(), Self::Error> {
         if self.body_fields.contains(&key) {
+            self.seen_body.push(key);
             let captured = capture_body_field(value, self.format)?;
-            self.body.insert(key.to_owned(), captured);
+            self.body.insert(key, captured);
         } else {
             // Front-matter fields are written later, straight from the value,
             // so that the encoder sees them in the order they were declared.
@@ -423,7 +454,27 @@ impl SerializeStruct for StructSerializer {
         Ok(())
     }
 
+    /// A field the value leaves out (`skip_serializing_if`) is still a field
+    /// of the struct; a skipped front-matter field needs no note.
+    fn skip_field(&mut self, key: &'static str) -> Result<(), Self::Error> {
+        if self.body_fields.contains(&key) {
+            self.seen_body.push(key);
+        }
+        Ok(())
+    }
+
+    /// A body field the value never named, set or skipped, is a
+    /// [`crate::ErrorKind::Type`] error: its section would be dropped.
     fn end(self) -> Result<Self::Ok, Self::Error> {
+        if let Some(name) = self
+            .body_fields
+            .iter()
+            .find(|name| !self.seen_body.contains(name))
+        {
+            return Err(Error::type_error(format!(
+                "the body field `{name}` is not a field of the value being written"
+            )));
+        }
         Ok(Captured {
             front_len: self.front_len,
             body: self.body,
@@ -627,10 +678,13 @@ impl<S: Serializer> Serializer for FrontOnly<S> {
 /// The value of each body field, in declaration order, with the trailing
 /// absent ones left out: the last body field has no separator, so it reads
 /// back as absent.
-fn slots(mut body: HashMap<String, BodyValue>, body_fields: &[&str]) -> Vec<BodyValue> {
+fn slots(
+    mut body: HashMap<&'static str, BodyValue>,
+    body_fields: &[&'static str],
+) -> Vec<BodyValue> {
     let mut slots: Vec<BodyValue> = body_fields
         .iter()
-        .map(|name| body.remove(*name).unwrap_or(BodyValue::Null))
+        .map(|name| body.remove(name).unwrap_or(BodyValue::Null))
         .collect();
     while slots
         .pop_if(|slot| matches!(slot, BodyValue::Null))
@@ -653,6 +707,10 @@ fn render(
     format: Format,
     layout: FieldsLayout,
 ) -> Result<String, Error> {
+    // A bare block with nothing in it (every field absent, in a language
+    // that writes no key for it) is no block: the document is written as one
+    // with no fields.
+    let front = front.filter(|dumped| layout != FieldsLayout::Bare || !dumped.trim().is_empty());
     // After a fence or a bare mapping the document already ends in a line
     // break, which serves as the break that ends an empty first section.
     let after_fields = front.is_some();
@@ -690,16 +748,7 @@ fn render(
     let mut out = String::new();
     match front {
         Some(dumped) => {
-            match layout {
-                FieldsLayout::Fenced => {
-                    out.push_str("```");
-                    out.push_str(fence_lang(format));
-                    out.push('\n');
-                    push_with_newline(&mut out, &dumped);
-                    out.push_str("```\n");
-                }
-                FieldsLayout::Bare => push_with_newline(&mut out, &dumped),
-            }
+            out.push_str(&fields_block(dumped, format, layout)?);
             // A present body, even an empty one, needs the `---` that ends
             // the bare fields: without it the body reads back as absent.
             if separated && !texts.is_empty() {
@@ -708,12 +757,88 @@ fn render(
         }
         None => {
             if !region.is_empty() && would_read_fields(&region, count)? {
+                if !format_enabled(format) {
+                    // The reader would refuse the block that the body needs.
+                    return Err(Error::format_disabled(format));
+                }
                 out.push_str(empty_fields_block(format));
             }
         }
     }
     out.push_str(&region);
     Ok(out)
+}
+
+/// Whether the crate was built with the decoder of `format`.
+fn format_enabled(format: Format) -> bool {
+    match format {
+        Format::Yaml => cfg!(feature = "yaml"),
+        Format::Json => cfg!(feature = "json"),
+        Format::Toml => cfg!(feature = "toml"),
+    }
+}
+
+/// The fields block as it goes into the document, with the line break that
+/// ends it: a fence of `format`'s language, or the bare text.
+///
+/// The fence is longer than any run of backticks that starts a line of the
+/// encoded text, so no line of the text closes it. The block is then read
+/// back the way a reader would, and anything but the same language and the
+/// same text is [`crate::ErrorKind::FrontMatter`] with no source: a value
+/// whose encoding a reader would split or take for something else, such as a
+/// string holding a `---` line in a bare block, is refused rather than
+/// written as a document that reads back differently or not at all.
+fn fields_block(dumped: String, format: Format, layout: FieldsLayout) -> Result<String, Error> {
+    let mut text = dumped;
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    let (block, probe) = match layout {
+        FieldsLayout::Fenced => {
+            let ticks = "`".repeat(fence_len(&text));
+            let block = format!("{ticks}{}\n{text}{ticks}\n", format.as_str());
+            (block.clone(), block)
+        }
+        FieldsLayout::Bare => (text.clone(), format!("{text}---\n")),
+    };
+    let reads_back = match parse(&probe, 0).map(|doc| doc.fields) {
+        Ok(Fields::Fenced {
+            labeled: Some(lang),
+            inner,
+            ..
+        }) => layout == FieldsLayout::Fenced && lang.format() == format && inner == text,
+        Ok(Fields::Bare { sniff, inner, .. }) => {
+            layout == FieldsLayout::Bare && sniff.format() == format && inner == text
+        }
+        Ok(Fields::Fenced { labeled: None, .. } | Fields::None) | Err(_) => false,
+    };
+    if !reads_back {
+        return Err(Error::front_matter_message(match layout {
+            FieldsLayout::Fenced => "the fields block would not read back as written".to_owned(),
+            FieldsLayout::Bare => "the fields block would not read back as written; \
+                 write it with FieldsLayout::Fenced"
+                .to_owned(),
+        }));
+    }
+    format::load(&text, format)?;
+    Ok(block)
+}
+
+/// Length of the fence around `text`: three backticks, or one more than the
+/// longest run of backticks that starts a line of `text` after its leading
+/// spaces and tabs.
+fn fence_len(text: &str) -> usize {
+    let longest = text
+        .lines()
+        .map(|line| {
+            line.trim_start_matches([' ', '\t'])
+                .bytes()
+                .take_while(|byte| *byte == b'`')
+                .count()
+        })
+        .max()
+        .unwrap_or(0);
+    (longest + 1).max(3)
 }
 
 /// An explicit fields block with no fields, written before a body-only
@@ -761,10 +886,6 @@ fn section_text(value: BodyValue, last: bool) -> Result<String, Error> {
     Ok(text)
 }
 
-/// Two characters that stand for an optional empty string in a body section
-/// that is not the last (an empty section there is `None`).
-const EMPTY_STRING_SECTION: &str = "\"\"";
-
 fn capture_body_field<T: ?Sized + Serialize>(
     value: &T,
     format: Format,
@@ -784,7 +905,14 @@ fn capture_body_field<T: ?Sized + Serialize>(
                 optional: some.get(),
             })
         }
-        Err(ProbeError::NotText) => Ok(BodyValue::Dumped(format::dump(value, format)?)),
+        Err(ProbeError::NotText) => {
+            if let Some(number) = find_non_finite(value) {
+                return Err(Error::body(format_args!(
+                    "the number {number} is not finite, which a structured section cannot hold"
+                )));
+            }
+            Ok(BodyValue::Dumped(format::dump(value, format)?))
+        }
         Err(ProbeError::InvalidUtf8) => Err(Error::body("invalid UTF-8 in byte body field")),
         Err(ProbeError::Other(err)) => Err(err),
     }
@@ -793,8 +921,12 @@ fn capture_body_field<T: ?Sized + Serialize>(
 /// Whether `text` reads back as an empty list, in `format` or in YAML (the
 /// language of a document with no fields block). An empty `Vec<u8>` is
 /// written as that list, so a byte body with such text could not be told
-/// from it.
+/// from it. Text that cannot start a list is not decoded at all.
 fn reads_as_empty_list(text: &str, format: Format) -> bool {
+    // Text that cannot start a list reads as no list in either language.
+    if !may_be_list(text) {
+        return false;
+    }
     [format, Format::Yaml].into_iter().any(|lang| {
         matches!(format::load_body(text, lang), Ok(Value::Array(values)) if values.is_empty())
     })
@@ -1214,21 +1346,6 @@ impl SerializeSeq for ProbeSeq {
                 from_seq: true,
             })
             .map_err(|_| ProbeError::InvalidUtf8)
-    }
-}
-
-fn fence_lang(format: Format) -> &'static str {
-    match format {
-        Format::Yaml => "yaml",
-        Format::Json => "json",
-        Format::Toml => "toml",
-    }
-}
-
-fn push_with_newline(out: &mut String, text: &str) {
-    out.push_str(text);
-    if !out.ends_with('\n') {
-        out.push('\n');
     }
 }
 
@@ -1913,5 +2030,46 @@ mod tests {
         let md = to_string_with(&values::body_only(), Format::Json, FieldsLayout::Fenced)
             .expect("serialize");
         assert_eq!(md, crate::testdata::goldens::BODY_ONLY_TWO_SECTIONS);
+    }
+
+    #[cfg(not(all(feature = "yaml", feature = "json", feature = "toml")))]
+    #[derive(Serialize)]
+    struct OneBody {
+        text: String,
+    }
+
+    #[cfg(not(all(feature = "yaml", feature = "json", feature = "toml")))]
+    impl Markdown for OneBody {
+        const BODY_FIELDS: &'static [&'static str] = &["text"];
+    }
+
+    #[cfg(not(feature = "yaml"))]
+    #[test]
+    fn without_yaml_an_empty_yaml_fields_block_is_format_disabled() {
+        let value = OneBody {
+            text: "a: b".into(),
+        };
+        let err = to_string(&value).expect_err("the reader could not read the block");
+        assert_eq!(err.kind(), ErrorKind::FormatDisabled);
+    }
+
+    #[cfg(not(feature = "json"))]
+    #[test]
+    fn without_json_an_empty_json_fields_block_is_format_disabled() {
+        let value = OneBody {
+            text: "{ not json".into(),
+        };
+        let err = to_string_with_format(&value, Format::Json).expect_err("disabled");
+        assert_eq!(err.kind(), ErrorKind::FormatDisabled);
+    }
+
+    #[cfg(not(feature = "toml"))]
+    #[test]
+    fn without_toml_an_empty_toml_fields_block_is_format_disabled() {
+        let value = OneBody {
+            text: "a = 1".into(),
+        };
+        let err = to_string_with_format(&value, Format::Toml).expect_err("disabled");
+        assert_eq!(err.kind(), ErrorKind::FormatDisabled);
     }
 }

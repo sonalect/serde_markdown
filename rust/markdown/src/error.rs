@@ -8,7 +8,7 @@ use crate::Format;
 
 /// Failure while reading or writing a Markdown document.
 ///
-/// Callers match [`kind`](Error::kind). Do not parse [`Display`].
+/// Callers match [`kind`](Error::kind). Do not parse [`Display`](std::fmt::Display).
 pub struct Error {
     inner: Box<Inner>,
 }
@@ -22,18 +22,24 @@ struct Inner {
     missing_field: Option<&'static str>,
 }
 
-/// Classification for [`Error`]. Match this; do not parse [`Display`].
+/// Classification for [`Error`]. Match this; do not parse [`Display`](std::fmt::Display).
+/// New kinds may be added, so a `match` needs a `_` arm.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorKind {
     /// Unclosed fence, bad info string, scan failure, or invalid UTF-8 on byte input.
     /// [`Error::offset`] is `Some`.
     Syntax,
-    /// Decoder error on the fields slice. [`std::error::Error::source`] is the decoder.
+    /// Decoder error on the fields slice ([`std::error::Error::source`] is the
+    /// decoder), or fields the writer refuses: a number that is not finite, or a
+    /// block a reader would not read back as written (no source then).
     FrontMatter,
     /// Section count, empty required structured section, invalid UTF-8 on `Vec<u8>`
     /// serialize, or a decoder error on a structured body section (`source` set then).
     Body,
-    /// Root is not a named struct, or a mapping-layer Serde `custom` / `missing_field`.
+    /// Root is not a named struct, a mapping-layer Serde `custom` / `missing_field`,
+    /// a fields key named like a body field, or a body field name the value never
+    /// serializes.
     Type,
     /// Fence language is not in the compiled crate features.
     FormatDisabled,
@@ -42,7 +48,7 @@ pub enum ErrorKind {
 }
 
 impl Error {
-    /// Classification for this failure. Match this; do not parse [`Display`].
+    /// Classification for this failure. Match this; do not parse [`Display`](std::fmt::Display).
     pub fn kind(&self) -> ErrorKind {
         self.inner.kind
     }
@@ -59,7 +65,7 @@ impl Error {
     }
 
     /// Unclosed fence, bad info string, scan failure, or invalid UTF-8 on byte input.
-    pub fn syntax(offset: usize, msg: impl fmt::Display) -> Self {
+    pub(crate) fn syntax(offset: usize, msg: impl fmt::Display) -> Self {
         Self::new(
             ErrorKind::Syntax,
             Some(offset),
@@ -69,7 +75,8 @@ impl Error {
     }
 
     /// Decoder error on the fields slice. [`std::error::Error::source`] is `err`.
-    pub fn front_matter<E>(err: E) -> Self
+    #[cfg(any(feature = "yaml", feature = "json", feature = "toml"))]
+    pub(crate) fn front_matter<E>(err: E) -> Self
     where
         E: Into<Box<dyn StdError + Send + Sync + 'static>>,
     {
@@ -82,13 +89,24 @@ impl Error {
         )
     }
 
+    /// Fields-block failure with no decoder behind it, found by the writer.
+    pub(crate) fn front_matter_message(msg: impl fmt::Display) -> Self {
+        Self::new(
+            ErrorKind::FrontMatter,
+            None,
+            format!("front matter: {msg}"),
+            None,
+        )
+    }
+
     /// Body-section failure without a wrapped decoder error.
-    pub fn body(msg: impl fmt::Display) -> Self {
+    pub(crate) fn body(msg: impl fmt::Display) -> Self {
         Self::new(ErrorKind::Body, None, format!("body: {msg}"), None)
     }
 
     /// Body-section failure with a wrapped decoder error as [`std::error::Error::source`].
-    pub fn body_source<E>(msg: impl fmt::Display, err: E) -> Self
+    #[cfg(any(feature = "yaml", feature = "json", feature = "toml"))]
+    pub(crate) fn body_source<E>(msg: impl fmt::Display, err: E) -> Self
     where
         E: Into<Box<dyn StdError + Send + Sync + 'static>>,
     {
@@ -103,12 +121,12 @@ impl Error {
 
     /// Mapping-layer type failure. [`Display`] is exactly `msg` (not capitalized,
     /// no trailing period).
-    pub fn type_error(msg: impl fmt::Display) -> Self {
+    pub(crate) fn type_error(msg: impl fmt::Display) -> Self {
         Self::new(ErrorKind::Type, None, msg, None)
     }
 
     /// Fence language is not in the compiled crate features.
-    pub fn format_disabled(format: Format) -> Self {
+    pub(crate) fn format_disabled(format: Format) -> Self {
         Self::new(
             ErrorKind::FormatDisabled,
             None,
@@ -118,7 +136,7 @@ impl Error {
     }
 
     /// I/O failure from `to_writer` / `from_reader`. [`std::error::Error::source`] is `err`.
-    pub fn io(err: io::Error) -> Self {
+    pub(crate) fn io(err: io::Error) -> Self {
         Self::new(
             ErrorKind::Io,
             None,
@@ -217,6 +235,7 @@ mod tests {
         assert!(display.contains("unclosed fence"), "{display}");
     }
 
+    #[cfg(any(feature = "yaml", feature = "json", feature = "toml"))]
     #[test]
     fn front_matter_wraps_decoder() {
         let err = Error::front_matter(io::Error::other("decoder failed"));
@@ -232,6 +251,7 @@ mod tests {
         assert!(StdError::source(&err).is_none());
     }
 
+    #[cfg(any(feature = "yaml", feature = "json", feature = "toml"))]
     #[test]
     fn body_source() {
         let err = Error::body_source("note", io::Error::other("decoder failed"));

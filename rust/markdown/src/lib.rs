@@ -9,9 +9,9 @@
 //! `json`, `toml`, and `derive`. Feature `buffa` is off by default. A fence
 //! language not in the compiled features is [`ErrorKind::FormatDisabled`].
 //! Documents are UTF-8: [`from_slice`] fails with [`ErrorKind::Syntax`] on
-//! invalid bytes. The mapping document path is [`DESIGN`].
+//! invalid bytes.
 //!
-//! Feature `tokio` (off by default) adds [`tokio`](mod@crate::tokio): the
+//! Feature `tokio` (off by default) adds the module `serde_markdown::tokio`: the
 //! async twin of every function here, under the same name. It runs the same
 //! algorithm in steps and yields to the scheduler between them when the
 //! task's cooperative budget is spent; no thread is spawned.
@@ -49,17 +49,16 @@
 //! # fn main() {}
 //! ```
 
-/// Path of the mapping document in the repository root (`DESIGN.md`).
-///
-/// That file is the format contract: fields fence, body sections, fence
-/// languages, features, and error kinds.
-pub const DESIGN: &str = "DESIGN.md";
-
 /// Directory containing `markdown/options.proto` for include paths.
 ///
 /// The file ships inside this crate, so the Cargo dependency that brings the
 /// library also brings the option. Pass this to buffa or protoc includes so
 /// `import "markdown/options.proto"` resolves.
+///
+/// This is for Cargo builds. Under Bazel, `CARGO_MANIFEST_DIR` is a path in
+/// the action's execution root, filled in at compile time, so the baked
+/// constant is not a stable directory for a build script: a Bazel build script
+/// takes the directory from the annotated filegroup instead.
 pub const PROTO_INCLUDE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/proto");
 
 #[cfg(feature = "buffa")]
@@ -71,6 +70,7 @@ extern crate self as serde_markdown;
 mod de;
 mod drive;
 mod error;
+mod finite;
 mod format;
 #[cfg(any(feature = "yaml", feature = "json", feature = "toml"))]
 mod ir;

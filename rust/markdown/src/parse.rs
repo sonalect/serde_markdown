@@ -6,8 +6,10 @@
 //! before the last body section is [`crate::ErrorKind::Syntax`] with a byte
 //! offset.
 //!
-//! The last body field is never parsed: it is every byte after its separator.
-//! Only the text before it is scanned for top-level dash `---` rules.
+//! The last body field is every byte after its separator, taken verbatim:
+//! it is never split or trimmed, and the CommonMark parser does not read
+//! past the block that holds its separator. Only the text before it is
+//! scanned for top-level dash `---` rules.
 
 use std::ops::Range;
 
@@ -70,15 +72,10 @@ pub(crate) struct Document {
 /// end the earlier sections; the last section is the rest of the document,
 /// verbatim. Sections that are missing from the document are not returned.
 pub(crate) fn parse(input: &str, body_fields: usize) -> Result<Document, Error> {
-    let events: Vec<(Event<'_>, Range<usize>)> = Parser::new_ext(input, parser_options())
-        .into_offset_iter()
-        .collect();
+    let mut scan = Scan::new(input);
+    let content_start = scan.skip_prefix();
 
-    let dash_rules = top_level_dash_rules(input, &events);
-    let content_start = skip_prefix(input, &dash_rules);
-
-    let (fields, body_start, separated) = match leading_fields_fence(input, &events, content_start)
-    {
+    let (fields, body_start, separated) = match scan.leading_fields_fence(content_start) {
         Some(fence) => {
             let fields = Fields::Fenced {
                 labeled: fence.labeled,
@@ -88,28 +85,36 @@ pub(crate) fn parse(input: &str, body_fields: usize) -> Result<Document, Error> 
             (fields, fence.body_start, false)
         }
         None => {
-            let next_rule = dash_rules
-                .iter()
-                .find(|range| range.start >= content_start)
-                .cloned();
-            let (inner, body_start, separated) = match next_rule {
-                Some(range) => (
-                    input[content_start..range.start].to_owned(),
-                    range.end,
-                    true,
-                ),
-                None => (input[content_start..].to_owned(), input.len(), false),
+            let (end, body_start, separated) =
+                match scan.rules_from(content_start, 1).first().cloned() {
+                    Some(range) => (range.start, range.end, true),
+                    None => (input.len(), input.len(), false),
+                };
+            let inner = &input[content_start..end];
+            let sniff = sniff(inner);
+            // A first slice that starts with `[` and is not a TOML table
+            // header is prose (a link, a list), never fields.
+            let mapping = if sniff == Sniff::Json && starts_with_bracket(inner) {
+                None
+            } else {
+                load_bare_mapping(inner, sniff)?
             };
-            let sniff = sniff(&inner);
-            match load_bare_mapping(&inner, sniff)? {
-                Some(map) => (Fields::Bare { sniff, inner, map }, body_start, separated),
+            // The slice is copied only once it is known to be fields.
+            match mapping {
+                Some(map) => {
+                    let inner = inner.to_owned();
+                    (Fields::Bare { sniff, inner, map }, body_start, separated)
+                }
                 None => (Fields::None, 0, false),
             }
         }
     };
 
-    let split = split_body(input, body_start, &dash_rules, body_fields, separated);
-    if let Some(offset) = unclosed_fence_offset(input, &events, split.verbatim_from) {
+    // Only the separators that end the earlier sections are needed; the last
+    // section is the rest of the document and is never scanned for them.
+    scan.rules_from(body_start, body_fields.saturating_sub(1));
+    let split = split_body(input, body_start, &scan.rules, body_fields, separated);
+    if let Some(offset) = scan.unclosed_fence_offset(split.verbatim_from) {
         return Err(Error::syntax(offset, "unclosed fence"));
     }
     Ok(Document {
@@ -122,6 +127,10 @@ pub(crate) fn parse(input: &str, body_fields: usize) -> Result<Document, Error> 
 /// the YAML decoder rejects) is `None`: the slice is body. A JSON or TOML
 /// decode failure stays [`ErrorKind::FrontMatter`].
 fn load_bare_mapping(inner: &str, sniff: Sniff) -> Result<Option<Map<String, Value>>, Error> {
+    // YAML only: a slice that cannot be a mapping is not decoded at all.
+    if sniff == Sniff::Yaml && !may_be_yaml_mapping(inner) {
+        return Ok(None);
+    }
     let format = sniff.format();
     let value = match format::load(inner, format) {
         Ok(value) => value,
@@ -143,6 +152,27 @@ fn load_bare_mapping(inner: &str, sniff: Sniff) -> Result<Option<Map<String, Val
         Value::Null => Some(Map::new()),
         _ => None,
     })
+}
+
+/// A permissive test that `text` may decode as a YAML mapping, so that
+/// prose is not run through the YAML decoder in full. False is certain: the
+/// slice is not a mapping. True means the decoder has to look.
+///
+/// A YAML block mapping has a `:` on its first key line, because an implicit
+/// key is a single line; the first key line is the first significant line
+/// (blank lines and `#` comments skipped). A flow mapping starts with `{`, an
+/// explicit key with `?`, and a node may begin with a tag (`!`), an anchor
+/// (`&`), an alias (`*`) or a directive (`%`). Text without any significant
+/// line decodes as an empty mapping and is left to the decoder.
+fn may_be_yaml_mapping(text: &str) -> bool {
+    match text
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with('#'))
+    {
+        None => true,
+        Some(line) => line.contains(':') || line.starts_with(['?', '{', '!', '&', '*', '%']),
+    }
 }
 
 /// Whether the first significant line of `text` (blank lines and `#`
@@ -187,6 +217,10 @@ pub(crate) fn would_read_fields(candidate: &str, body_fields: usize) -> Result<b
 /// the earlier section, then `---`, then its line break.
 pub(crate) const SEPARATOR: &str = "\n---\n";
 
+/// Two characters that stand for an optional empty string (`Some("")`) in a
+/// body section that is not the last (an empty section there is `None`).
+pub(crate) const EMPTY_STRING_SECTION: &str = "\"\"";
+
 /// Check that `text` can be written as a body section that is not the last
 /// one: followed by the canonical separator, a reader finds exactly that one
 /// top-level dash rule and no unclosed fence.
@@ -199,19 +233,39 @@ pub(crate) fn check_middle_section(text: &str) -> Result<(), Error> {
     let mut doc = String::with_capacity(text.len() + SEPARATOR.len());
     doc.push_str(text);
     doc.push_str(SEPARATOR);
-    let events: Vec<(Event<'_>, Range<usize>)> = Parser::new_ext(&doc, parser_options())
-        .into_offset_iter()
-        .collect();
-    let rules = top_level_dash_rules(&doc, &events);
-    let closed = unclosed_fence_offset(&doc, &events, doc.len()).is_none();
+    let mut scan = Scan::new(&doc);
+    while scan.pull() {}
+    let closed = scan.unclosed_fence_offset(doc.len()).is_none();
     let expected = text.len() + 1;
-    match rules.as_slice() {
+    match scan.rules.as_slice() {
         [rule] if closed && rule.start == expected => Ok(()),
         _ => Err(Error::body(
             "a body value that is not the last contains a top-level `---` line \
              (or an unclosed code fence) and would split on read; \
              put it in the last body field",
         )),
+    }
+}
+
+/// Whether `text` may be a list in the fence language: its first
+/// significant character, after whitespace and whole `#` comment lines, is
+/// `[` (a JSON or flow list) or `-` (a YAML block list).
+///
+/// A false answer is certain: no decoder reads such text as a list, so the
+/// caller can skip decoding it. A true answer only means a decoder has to
+/// look. This keeps a large `Vec<u8>` body, which is raw text, from being
+/// parsed as a document on every read and write.
+pub(crate) fn may_be_list(text: &str) -> bool {
+    let mut rest = text;
+    loop {
+        rest = rest.trim_start();
+        match rest.strip_prefix('#') {
+            Some(comment) => match comment.split_once('\n') {
+                Some((_, after)) => rest = after,
+                None => return false,
+            },
+            None => return rest.starts_with(['[', '-']),
+        }
     }
 }
 
@@ -230,36 +284,6 @@ fn first_line(text: &str) -> Option<(&str, &str)> {
         Some(i) => Some((text[..i].trim_end_matches('\r'), &text[i + 1..])),
         None => Some((text.trim_end_matches('\r'), "")),
     }
-}
-
-/// Start of the first fenced block that begins before `limit` and has no
-/// closing fence. Text from `limit` on is the verbatim last section and is
-/// not checked.
-fn unclosed_fence_offset(
-    input: &str,
-    events: &[(Event<'_>, Range<usize>)],
-    limit: usize,
-) -> Option<usize> {
-    for (i, (event, range)) in events.iter().enumerate() {
-        let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(_))) = event else {
-            continue;
-        };
-        if range.start >= limit {
-            break;
-        }
-        let end_idx = matching_code_block_end(events, i);
-        let end = events
-            .get(end_idx)
-            .map(|(_, r)| r.end)
-            .unwrap_or(input.len())
-            .max(range.end)
-            .min(input.len());
-        let line_start = input[..range.start].rfind('\n').map_or(0, |nl| nl + 1);
-        if !fenced_block_has_closer(&input[line_start..end], range.start - line_start) {
-            return Some(range.start);
-        }
-    }
-    None
 }
 
 /// Opening fence plus a last line that is a CommonMark closing fence of the
@@ -368,25 +392,16 @@ fn nest_delta(event: &Event<'_>) -> i32 {
     }
 }
 
-fn top_level_dash_rules(input: &str, events: &[(Event<'_>, Range<usize>)]) -> Vec<Range<usize>> {
-    let mut nest = 0i32;
-    let mut rules = Vec::new();
-    for (event, range) in events {
-        nest += nest_delta(event);
-        if nest != 0 {
-            continue;
-        }
-        if matches!(event, Event::Rule) && is_dash_thematic_break(&input[range.clone()]) {
-            rules.push(range.clone());
-            continue;
-        }
-        if let Event::Start(Tag::Heading { .. }) = event
-            && let Some(underline) = setext_dash_underline(input, range.clone())
-        {
-            rules.push(underline);
-        }
+/// The top-level dash rule that `event` is or ends with, if any. The caller
+/// has checked that the event is not inside a container.
+fn dash_rule(input: &str, event: &Event<'_>, range: &Range<usize>) -> Option<Range<usize>> {
+    if matches!(event, Event::Rule) && is_dash_thematic_break(&input[range.clone()]) {
+        return Some(range.clone());
     }
-    rules
+    if let Event::Start(Tag::Heading { .. }) = event {
+        return setext_dash_underline(input, range.clone());
+    }
+    None
 }
 
 /// CommonMark turns `paragraph\n---` into a setext H2, not `Event::Rule`.
@@ -448,29 +463,6 @@ fn skip_ws(input: &str, mut pos: usize) -> usize {
     pos
 }
 
-/// Where the content starts after the leading whitespace and top-level dash
-/// rules. `dash_rules` are in document order, so one pass over them is
-/// enough: a rule that ends before the current position can no longer
-/// match.
-fn skip_prefix(input: &str, dash_rules: &[Range<usize>]) -> usize {
-    let mut pos = 0;
-    let mut rules = dash_rules.iter().peekable();
-    loop {
-        pos = skip_ws(input, pos);
-        while rules
-            .next_if(|rule| rule.end <= pos && rule.start != pos)
-            .is_some()
-        {}
-        match rules.peek() {
-            Some(rule) if rule.start <= pos && (pos < rule.end || rule.start == pos) => {
-                pos = rule.end;
-                rules.next();
-            }
-            _ => return pos,
-        }
-    }
-}
-
 struct LeadingFence {
     labeled: Option<Sniff>,
     sniff: Sniff,
@@ -478,56 +470,204 @@ struct LeadingFence {
     body_start: usize,
 }
 
-fn leading_fields_fence(
-    input: &str,
-    events: &[(Event<'_>, Range<usize>)],
-    content_start: usize,
-) -> Option<LeadingFence> {
-    let mut nest = 0i32;
-    for (i, (event, range)) in events.iter().enumerate() {
-        if range.end <= content_start {
-            nest += nest_delta(event);
-            continue;
-        }
-        if nest == 0
-            && let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(info))) = event
-        {
-            let between = &input[content_start..range.start];
-            if !between.chars().all(char::is_whitespace) {
-                return None;
-            }
-            let labeled = fields_lang(info)?;
-            let end_idx = matching_code_block_end(events, i);
-            let inner = fenced_inner(input, events, i, end_idx);
-            let sniff = labeled.unwrap_or_else(|| sniff(&inner));
-            return Some(LeadingFence {
-                labeled,
-                sniff,
-                inner,
-                // The closing fence line's terminator is not body text.
-                body_start: skip_one_line_ending(input, range.end),
-            });
-        }
-        nest += nest_delta(event);
-    }
-    None
+/// The CommonMark events of a document, pulled from the parser only as far
+/// as the caller asks, together with the top-level dash rules among them.
+///
+/// The text after the last separator that the split needs is the verbatim
+/// last body field: it is never split or trimmed, and it is not parsed
+/// past the block that holds its separator.
+struct Scan<'a> {
+    input: &'a str,
+    source: Box<dyn Iterator<Item = (Event<'a>, Range<usize>)> + 'a>,
+    /// The events pulled so far, in document order.
+    events: Vec<(Event<'a>, Range<usize>)>,
+    /// The top-level dash rules among `events`, in document order.
+    rules: Vec<Range<usize>>,
+    /// How deep inside containers the last pulled event is.
+    nest: i32,
+    /// The parser has no more events.
+    done: bool,
 }
 
-fn matching_code_block_end(events: &[(Event<'_>, Range<usize>)], start_idx: usize) -> usize {
-    let mut depth = 0i32;
-    for (j, (event, _)) in events[start_idx..].iter().enumerate() {
-        match event {
-            Event::Start(Tag::CodeBlock(_)) => depth += 1,
-            Event::End(TagEnd::CodeBlock) => {
-                depth -= 1;
-                if depth == 0 {
-                    return start_idx + j;
-                }
-            }
-            _ => {}
+impl<'a> Scan<'a> {
+    fn new(input: &'a str) -> Self {
+        Self {
+            input,
+            source: Box::new(Parser::new_ext(input, parser_options()).into_offset_iter()),
+            events: Vec::new(),
+            rules: Vec::new(),
+            nest: 0,
+            done: false,
         }
     }
-    events.len().saturating_sub(1)
+
+    /// Pull one more event. False when the document has no more.
+    fn pull(&mut self) -> bool {
+        let Some((event, range)) = self.source.next() else {
+            self.done = true;
+            return false;
+        };
+        self.nest += nest_delta(&event);
+        if self.nest == 0
+            && let Some(rule) = dash_rule(self.input, &event, &range)
+        {
+            self.rules.push(rule);
+        }
+        self.events.push((event, range));
+        true
+    }
+
+    /// The event at `index`, pulled if need be.
+    fn event(&mut self, index: usize) -> Option<&(Event<'a>, Range<usize>)> {
+        while self.events.len() <= index && self.pull() {}
+        self.events.get(index)
+    }
+
+    /// Pull until the last event starts after `pos`, so that every rule that
+    /// starts at or before `pos` is known.
+    fn reach(&mut self, pos: usize) {
+        while self
+            .events
+            .last()
+            .is_none_or(|(_, range)| range.start <= pos)
+            && self.pull()
+        {}
+    }
+
+    /// The rules that start at or after `from`, pulling until `count` of
+    /// them are known or the document ends.
+    fn rules_from(&mut self, from: usize, count: usize) -> &[Range<usize>] {
+        while self.rules.len() - self.rules.partition_point(|rule| rule.start < from) < count
+            && self.pull()
+        {}
+        &self.rules[self.rules.partition_point(|rule| rule.start < from)..]
+    }
+
+    /// Where the content starts after the leading whitespace and top-level
+    /// dash rules.
+    fn skip_prefix(&mut self) -> usize {
+        let mut pos = 0;
+        let mut next = 0;
+        loop {
+            pos = skip_ws(self.input, pos);
+            self.reach(pos);
+            while self
+                .rules
+                .get(next)
+                .is_some_and(|rule| rule.end <= pos && rule.start != pos)
+            {
+                next += 1;
+            }
+            match self.rules.get(next) {
+                Some(rule) if rule.start <= pos && (pos < rule.end || rule.start == pos) => {
+                    pos = rule.end;
+                    next += 1;
+                }
+                _ => return pos,
+            }
+        }
+    }
+
+    /// The fields fence that opens the content at `content_start`, if the
+    /// first block there is a fenced block of a fields language.
+    fn leading_fields_fence(&mut self, content_start: usize) -> Option<LeadingFence> {
+        self.reach(content_start);
+        let input = self.input;
+        let mut nest = 0i32;
+        let mut i = 0;
+        while let Some((event, range)) = self.event(i) {
+            let range = range.clone();
+            if range.end <= content_start {
+                nest += nest_delta(event);
+                i += 1;
+                continue;
+            }
+            if nest == 0 {
+                if let Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(info))) = event {
+                    let between = &input[content_start..range.start];
+                    if !between.chars().all(char::is_whitespace) {
+                        return None;
+                    }
+                    let labeled = fields_lang(info)?;
+                    let end_idx = self.matching_code_block_end(i);
+                    let inner = fenced_inner(input, &self.events, i, end_idx);
+                    let sniff = labeled.unwrap_or_else(|| sniff(&inner));
+                    return Some(LeadingFence {
+                        labeled,
+                        sniff,
+                        inner,
+                        // The closing fence line's terminator is not body text.
+                        body_start: skip_one_line_ending(input, range.end),
+                    });
+                }
+                // Any other block that starts at the content is not a fence,
+                // and nothing after it can be the first block.
+                if range.start >= content_start && !matches!(event, Event::End(_)) {
+                    return None;
+                }
+            }
+            nest += nest_delta(event);
+            i += 1;
+        }
+        None
+    }
+
+    /// Index of the end event of the code block that starts at `start_idx`,
+    /// or of the last event when the block is not closed.
+    fn matching_code_block_end(&mut self, start_idx: usize) -> usize {
+        let mut depth = 0i32;
+        let mut j = start_idx;
+        while let Some((event, _)) = self.event(j) {
+            match event {
+                Event::Start(Tag::CodeBlock(_)) => depth += 1,
+                Event::End(TagEnd::CodeBlock) => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return j;
+                    }
+                }
+                _ => {}
+            }
+            j += 1;
+        }
+        self.events.len().saturating_sub(1)
+    }
+
+    /// Start of the first fenced block that begins before `limit` and has no
+    /// closing fence. Text from `limit` on is the verbatim last section and
+    /// is not checked, nor parsed.
+    fn unclosed_fence_offset(&mut self, limit: usize) -> Option<usize> {
+        let input = self.input;
+        let mut i = 0;
+        while let Some((event, range)) = self.event(i) {
+            let range = range.clone();
+            // Blocks start in document order: nothing after this is before
+            // `limit`.
+            if range.start >= limit && !matches!(event, Event::End(_)) {
+                break;
+            }
+            if !matches!(
+                event,
+                Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(_)))
+            ) {
+                i += 1;
+                continue;
+            }
+            let end_idx = self.matching_code_block_end(i);
+            let end = self
+                .events
+                .get(end_idx)
+                .map_or(input.len(), |(_, r)| r.end)
+                .max(range.end)
+                .min(input.len());
+            let line_start = input[..range.start].rfind('\n').map_or(0, |nl| nl + 1);
+            if !fenced_block_has_closer(&input[line_start..end], range.start - line_start) {
+                return Some(range.start);
+            }
+            i += 1;
+        }
+        None
+    }
 }
 
 fn fenced_inner(
@@ -559,50 +699,127 @@ fn fields_lang(info: &str) -> Option<Option<Sniff>> {
     }
 }
 
+/// Shape-based guess for an unlabeled fence or a bare first slice.
+///
+/// A first character `{` means JSON. TOML is chosen only when the first
+/// significant line (blank lines and `#` comments skipped) is a strict table
+/// header (`[key]` or `[[key]]`) or a strict `key = value` line, see
+/// [`looks_like_toml`]. Anything else starting with `[` is JSON, and the rest
+/// is YAML. A bare slice that starts with `[` and is not a TOML header is not
+/// fields at all; the caller checks that with [`starts_with_bracket`].
 fn sniff(text: &str) -> Sniff {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return Sniff::Yaml;
     }
-    let first = trimmed.chars().find(|c| !c.is_whitespace());
-    match first {
-        Some('{') | Some('[') => Sniff::Json,
-        _ if looks_like_toml(trimmed) => Sniff::Toml,
-        _ => Sniff::Yaml,
+    if trimmed.starts_with('{') {
+        return Sniff::Json;
     }
+    if looks_like_toml(trimmed) {
+        return Sniff::Toml;
+    }
+    if trimmed.starts_with('[') {
+        return Sniff::Json;
+    }
+    Sniff::Yaml
 }
 
+/// Whether the first non-whitespace character of `text` is `[`.
+fn starts_with_bracket(text: &str) -> bool {
+    text.trim_start().starts_with('[')
+}
+
+/// Whether the first significant line of `text` is TOML: a table header or
+/// a `key = value` line whose value starts like a TOML value. Prose such as
+/// `[text](url) more` or `E = mc² is famous` is not.
 fn looks_like_toml(text: &str) -> bool {
-    for line in text.lines() {
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
-            continue;
-        }
-        if line.starts_with("[[") {
-            return true;
-        }
-        if line.starts_with('[') && line.contains(']') {
-            return true;
-        }
-        if let Some((key, _)) = line.split_once('=') {
-            return is_toml_key(key.trim());
-        }
+    let Some(line) = text
+        .lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty() && !line.starts_with('#'))
+    else {
         return false;
-    }
-    false
+    };
+    is_toml_table_header(line) || is_toml_key_value(line)
 }
 
-fn is_toml_key(key: &str) -> bool {
-    if key.is_empty() {
+/// `[key]` or `[[key]]` (dotted and quoted keys allowed), optionally
+/// followed by a `#` comment.
+fn is_toml_table_header(line: &str) -> bool {
+    let (inner, closer) = match line.strip_prefix("[[") {
+        Some(inner) => (inner, "]]"),
+        None => match line.strip_prefix('[') {
+            Some(inner) => (inner, "]"),
+            None => return false,
+        },
+    };
+    let Some(rest) = toml_key(inner) else {
         return false;
+    };
+    let Some(rest) = rest.trim_start().strip_prefix(closer) else {
+        return false;
+    };
+    let rest = rest.trim_start();
+    rest.is_empty() || rest.starts_with('#')
+}
+
+/// `key = value` where the value starts like a TOML value.
+fn is_toml_key_value(line: &str) -> bool {
+    let Some(rest) = toml_key(line) else {
+        return false;
+    };
+    let Some(value) = rest.trim_start().strip_prefix('=') else {
+        return false;
+    };
+    let value = value.trim_start();
+    let Some(first) = value.chars().next() else {
+        return false;
+    };
+    if matches!(first, '"' | '\'' | '+' | '-' | '[' | '{') || first.is_ascii_digit() {
+        return true;
     }
-    let quoted = (key.starts_with('"') && key.ends_with('"'))
-        || (key.starts_with('\'') && key.ends_with('\''));
-    if quoted {
-        return key.len() >= 2;
+    ["true", "false", "inf", "nan"].iter().any(|word| {
+        value.strip_prefix(word).is_some_and(|after| {
+            !after.starts_with(|c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '-'))
+        })
+    })
+}
+
+/// A TOML key, bare, quoted, or dotted with optional blanks around the dots,
+/// at the start of `text`. Returns what follows it.
+fn toml_key(text: &str) -> Option<&str> {
+    let mut rest = toml_key_part(text.trim_start())?;
+    while let Some(after_dot) = rest.trim_start().strip_prefix('.') {
+        rest = toml_key_part(after_dot.trim_start())?;
     }
-    key.chars()
-        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+    Some(rest)
+}
+
+/// One part of a TOML key: a bare word, a basic string, or a literal string.
+fn toml_key_part(text: &str) -> Option<&str> {
+    let first = text.chars().next()?;
+    match first {
+        '"' => {
+            let mut escaped = false;
+            for (i, c) in text.char_indices().skip(1) {
+                match c {
+                    _ if escaped => escaped = false,
+                    '\\' => escaped = true,
+                    '"' => return Some(&text[i + 1..]),
+                    '\n' => return None,
+                    _ => {}
+                }
+            }
+            None
+        }
+        '\'' => text[1..].find('\'').map(|end| &text[end + 2..]),
+        _ => {
+            let end = text
+                .find(|c: char| !(c.is_ascii_alphanumeric() || matches!(c, '_' | '-')))
+                .unwrap_or(text.len());
+            (end > 0).then(|| &text[end..])
+        }
+    }
 }
 
 /// Sections of the body region plus where the verbatim last section starts.
@@ -744,6 +961,76 @@ mod tests {
 
     fn parse_n(input: &str, body_fields: usize) -> Document {
         parse(input, body_fields).unwrap_or_else(|err| panic!("{err}"))
+    }
+
+    #[test]
+    fn may_be_list_looks_at_the_first_significant_character() {
+        for text in [
+            "[1]",
+            "  \n[]",
+            "- a",
+            "\n\n  - a",
+            "# note\n- a",
+            "#a\n  # b\n[1]",
+        ] {
+            assert!(may_be_list(text), "{text:?}");
+        }
+        for text in [
+            "",
+            "  \n",
+            "plain",
+            "a\n- b",
+            "{\"k\": []}",
+            "# only a comment",
+            "# c\nplain\n- a",
+            "k: [1]",
+        ] {
+            assert!(!may_be_list(text), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn may_be_yaml_mapping_is_permissive_about_the_first_key_line() {
+        for text in [
+            "",
+            "# only a comment\n\n",
+            "key: value",
+            "# c\n  key:\n",
+            "\"quoted\": 1",
+            "? key\n: value",
+            "{a: 1}",
+            "!!map {}",
+            "&a k: 1",
+            "*a : 1",
+            "%YAML 1.2\n---\na: 1",
+            "see http://example.com for more",
+        ] {
+            assert!(may_be_yaml_mapping(text), "{text:?}");
+        }
+        for text in [
+            "Just prose",
+            "# c\nJust prose\nlater: x",
+            "- a\n- b",
+            "plain text\nk: v",
+        ] {
+            assert!(!may_be_yaml_mapping(text), "{text:?}");
+        }
+    }
+
+    #[test]
+    fn a_yaml_slice_without_a_key_line_is_not_decoded_as_fields() {
+        // Later lines would be a mapping, but the first line decides.
+        let doc = parse_n("Prose first\nk: v\n", 1);
+        assert_eq!(doc.fields, Fields::None);
+        assert_eq!(doc.body, ["Prose first\nk: v\n"]);
+    }
+
+    #[test]
+    fn a_large_prose_document_has_no_fields() {
+        let text = "Prose with no key on its first line, nothing to decode\n".repeat(20_000);
+        let doc = parse_n(&text, 1);
+        assert_eq!(doc.fields, Fields::None);
+        assert_eq!(doc.body, [text]);
     }
 
     #[test]
@@ -1084,5 +1371,81 @@ Body text.\n";
         let (labeled, _, _) = fenced(&doc);
         assert_eq!(*labeled, Some(Sniff::Yaml));
         assert_eq!(doc.body, ["a", "b"]);
+    }
+
+    #[test]
+    fn sniff_toml_needs_a_strict_header_or_key_value() {
+        for toml in [
+            "[meta]\nk = 1",
+            "[[items]]\nk = 1",
+            "[a.b]",
+            "[ a . \"b c\" ] # note",
+            "# comment\n\n[t]",
+            "k = 1",
+            "a.b.\"c d\" = 'x'",
+            "'k' = \"v\" # c",
+            "ok = true",
+            "x = -inf",
+            "x = nan",
+            "x = [1]",
+            "x = {a = 1}",
+            "x=+1",
+        ] {
+            assert_eq!(sniff(toml), Sniff::Toml, "{toml:?}");
+        }
+        for not_toml in [
+            "[text](url) more",
+            "[ref]: http://example.com",
+            "E = mc² is famous",
+            "x = oops",
+            "x = trueish",
+            "= 1",
+            "a b = 1",
+            "key: value",
+            "- item",
+        ] {
+            assert_ne!(sniff(not_toml), Sniff::Toml, "{not_toml:?}");
+        }
+        assert_eq!(sniff("{\"a\": 1}"), Sniff::Json);
+        assert_eq!(sniff("[text](url) more"), Sniff::Json);
+    }
+
+    #[cfg(any(feature = "yaml", feature = "json", feature = "toml"))]
+    #[test]
+    fn a_bare_first_slice_starting_with_a_bracket_is_body_unless_a_toml_header() {
+        for body in [
+            "[text](url) more",
+            "[1, 2] is a pair",
+            "[ref]: http://x\nmore",
+        ] {
+            let doc = parse_n(body, 1);
+            assert_eq!(doc.fields, Fields::None, "{body:?}");
+            assert_eq!(doc.body, [body], "{body:?}");
+        }
+        // An unlabeled fence that starts with `[` is still JSON.
+        let doc = parse_n("```\n[1, 2]\n```\nb", 1);
+        let (labeled, sniff, _) = fenced(&doc);
+        assert_eq!(*labeled, None);
+        assert_eq!(sniff, Sniff::Json);
+    }
+
+    #[cfg(feature = "toml")]
+    #[test]
+    fn a_bare_toml_table_header_is_fields() {
+        let doc = parse_n("[meta]\nk = 1\n---\nb", 1);
+        let (sniff, inner) = bare(&doc);
+        assert_eq!(sniff, Sniff::Toml);
+        assert_eq!(inner, "[meta]\nk = 1\n");
+        assert_eq!(doc.body, ["b"]);
+    }
+
+    #[test]
+    fn a_fence_longer_than_three_backticks_holds_a_shorter_run() {
+        let doc = parse_n("````yaml\na: |-\n  x\n```\n  y\n````\nb", 1);
+        let (labeled, sniff, inner) = fenced(&doc);
+        assert_eq!(*labeled, Some(Sniff::Yaml));
+        assert_eq!(sniff, Sniff::Yaml);
+        assert_eq!(inner, "a: |-\n  x\n```\n  y\n");
+        assert_eq!(doc.body, ["b"]);
     }
 }

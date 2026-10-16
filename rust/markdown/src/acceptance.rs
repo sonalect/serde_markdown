@@ -776,3 +776,595 @@ mod review {
         );
     }
 }
+
+/// Regressions from the second full review: what the writer writes must read
+/// back as the same value or be refused at write, in every language and
+/// layout; body types that are not plain strings; keys and numbers that the
+/// fields IR used to lose.
+#[cfg(all(feature = "yaml", feature = "json", feature = "toml"))]
+mod hardening {
+    use std::collections::BTreeMap;
+    use std::error::Error as _;
+
+    use serde::{Deserialize, Serialize};
+
+    use crate::{ErrorKind, FieldsLayout, Format, Markdown, from_str, to_string, to_string_with};
+
+    const LANGUAGES: [Format; 3] = [Format::Yaml, Format::Json, Format::Toml];
+    const LAYOUTS: [FieldsLayout; 2] = [FieldsLayout::Fenced, FieldsLayout::Bare];
+
+    /// Writes `value` in every language and layout. Each combination either
+    /// reads back as `value` or is refused at write with `FrontMatter`.
+    /// Returns how many were refused.
+    fn round_trips_or_is_refused<T>(value: &T, what: &str) -> usize
+    where
+        T: Serialize + serde::de::DeserializeOwned + Markdown + PartialEq + std::fmt::Debug,
+    {
+        let mut refused = 0;
+        for format in LANGUAGES {
+            for layout in LAYOUTS {
+                match to_string_with(value, format, layout) {
+                    Ok(md) => {
+                        let back: T = from_str(&md).unwrap_or_else(|err| {
+                            panic!("{what} {format} {layout:?}: read error {err}\n{md}")
+                        });
+                        assert_eq!(&back, value, "{what} {format} {layout:?}:\n{md}");
+                    }
+                    Err(err) => {
+                        assert_eq!(
+                            err.kind(),
+                            ErrorKind::FrontMatter,
+                            "{what} {format} {layout:?}: {err}"
+                        );
+                        refused += 1;
+                    }
+                }
+            }
+        }
+        refused
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct Flat {
+        desc: String,
+        #[markdown(body)]
+        body: String,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    struct Inner {
+        desc: String,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct Deep {
+        inner: Inner,
+        list: Vec<String>,
+        #[markdown(body)]
+        body: String,
+    }
+
+    const HARD: [&str; 10] = [
+        "a\n```\nb",
+        "a\n````\nb",
+        "a\n~~~\nb",
+        "a\n---\nb",
+        "a\n  ---\nb",
+        "a\n- - -\nb",
+        "a\n<!-- x\nb",
+        "a\n<script>\nb",
+        "ends with CR\r",
+        "",
+    ];
+
+    #[test]
+    fn hard_front_matter_values_round_trip_or_are_refused() {
+        for text in HARD {
+            round_trips_or_is_refused(
+                &Flat {
+                    desc: text.into(),
+                    body: "Body.".into(),
+                },
+                &format!("flat {text:?}"),
+            );
+            round_trips_or_is_refused(
+                &Deep {
+                    inner: Inner { desc: text.into() },
+                    list: vec!["x".into(), text.into()],
+                    body: "Body.".into(),
+                },
+                &format!("deep {text:?}"),
+            );
+        }
+    }
+
+    #[test]
+    fn a_fenced_fields_block_grows_its_fence_past_the_values() {
+        for text in ["a\n```\nb", "a\n````\nb"] {
+            let value = Flat {
+                desc: text.into(),
+                body: "Body.".into(),
+            };
+            for format in LANGUAGES {
+                let md = to_string_with(&value, format, FieldsLayout::Fenced)
+                    .unwrap_or_else(|err| panic!("{format} {text:?}: {err}"));
+                let back: Flat = from_str(&md).unwrap_or_else(|err| panic!("{err}\n{md}"));
+                assert_eq!(back, value, "{format} {text:?}:\n{md}");
+            }
+        }
+        let value = Flat {
+            desc: "a\n```\nb".into(),
+            body: "Body.".into(),
+        };
+        let md = to_string(&value).expect("yaml");
+        assert!(md.starts_with("````yaml\n"), "{md}");
+        assert!(md.ends_with("````\nBody."), "{md}");
+    }
+
+    #[test]
+    fn a_bare_fields_block_that_would_not_read_back_is_refused() {
+        for text in ["a\n---\nb", "a\n<!-- x\nb", "a\n```\nb"] {
+            let value = Flat {
+                desc: text.into(),
+                body: "Body.".into(),
+            };
+            let err = to_string_with(&value, Format::Yaml, FieldsLayout::Bare)
+                .expect_err("a bare block that would not read back");
+            assert_eq!(err.kind(), ErrorKind::FrontMatter, "{text:?}: {err}");
+            assert!(err.source().is_none(), "{text:?}");
+            assert!(err.to_string().contains("FieldsLayout::Fenced"), "{err}");
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct AllNone {
+        title: Option<String>,
+        #[markdown(body)]
+        a: String,
+        #[markdown(body)]
+        b: String,
+    }
+
+    #[test]
+    fn an_empty_bare_fields_block_is_no_fields_block() {
+        let value = AllNone {
+            title: None,
+            a: "x".into(),
+            b: "y".into(),
+        };
+        let md = to_string_with(&value, Format::Toml, FieldsLayout::Bare).expect("toml bare");
+        assert_eq!(md, "x\n---\ny");
+        let back: AllNone = from_str(&md).expect("read back");
+        assert_eq!(back, value);
+        round_trips_or_is_refused(&value, "all none");
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    struct Title(String);
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    struct Count(i64);
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    struct Pt {
+        x: i32,
+        y: i32,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+    struct Wrapped(Pt);
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct BodyTypes {
+        name: String,
+        #[markdown(body)]
+        title: Title,
+        #[markdown(body)]
+        maybe: Option<Title>,
+        #[markdown(body)]
+        letter: char,
+        #[markdown(body)]
+        wrapped: Wrapped,
+    }
+
+    /// Numbers are structured sections; TOML has no top-level scalar.
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct NumBody {
+        name: String,
+        #[markdown(body)]
+        count: Count,
+        #[markdown(body)]
+        big: i64,
+        #[markdown(body)]
+        wrapped: Wrapped,
+    }
+
+    fn body_types(title: &str, letter: char) -> BodyTypes {
+        BodyTypes {
+            name: "n".into(),
+            title: Title(title.into()),
+            maybe: Some(Title("opt".into())),
+            letter,
+            wrapped: Wrapped(Pt { x: 1, y: 2 }),
+        }
+    }
+
+    #[test]
+    fn newtype_and_char_body_fields_are_raw_text() {
+        for title in [
+            "# Title\n\n- item",
+            "- item",
+            "plain",
+            "key: value",
+            "[1, 2]",
+        ] {
+            for letter in ['#', '-', '~', ':', 'x', 'é'] {
+                let value = body_types(title, letter);
+                let what = format!("{title:?} {letter:?}");
+                for format in LANGUAGES {
+                    let md = to_string_with(&value, format, FieldsLayout::Fenced)
+                        .unwrap_or_else(|err| panic!("{what} {format}: {err}"));
+                    let back: BodyTypes =
+                        from_str(&md).unwrap_or_else(|err| panic!("{what} {format}: {err}\n{md}"));
+                    assert_eq!(back, value, "{what} {format}:\n{md}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn newtype_and_plain_number_body_fields_are_structured() {
+        let value = NumBody {
+            name: "n".into(),
+            count: Count(-4),
+            big: i64::MIN,
+            wrapped: Wrapped(Pt { x: 1, y: 2 }),
+        };
+        for format in [Format::Yaml, Format::Json] {
+            for layout in LAYOUTS {
+                let md = to_string_with(&value, format, layout)
+                    .unwrap_or_else(|err| panic!("{format} {layout:?}: {err}"));
+                let back: NumBody =
+                    from_str(&md).unwrap_or_else(|err| panic!("{format} {layout:?}: {err}\n{md}"));
+                assert_eq!(back, value, "{format} {layout:?}:\n{md}");
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct OptTitle {
+        #[markdown(body)]
+        maybe: Option<Title>,
+    }
+
+    #[test]
+    fn an_optional_newtype_body_field_reads_its_text() {
+        let value = OptTitle {
+            maybe: Some(Title("# Title\n\n- item".into())),
+        };
+        let md = to_string(&value).expect("serialize");
+        assert_eq!(md, "# Title\n\n- item");
+        assert_eq!(from_str::<OptTitle>(&md).expect("read"), value);
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct Letter {
+        #[markdown(body)]
+        letter: char,
+    }
+
+    #[test]
+    fn a_char_body_field_with_no_section_is_a_body_error() {
+        let err = from_str::<Letter>("").expect_err("no section");
+        assert_eq!(err.kind(), ErrorKind::Body, "{err}");
+        let err = from_str::<Letter>("ab").expect_err("two characters");
+        assert!(err.to_string().contains("character"), "{err}");
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct Floats {
+        plain: f64,
+        maybe: Option<f64>,
+        #[markdown(body)]
+        body: String,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct FloatBody {
+        title: String,
+        #[markdown(body)]
+        n: f64,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct OptFloatBody {
+        title: String,
+        #[markdown(body)]
+        n: Option<f64>,
+    }
+
+    #[test]
+    fn non_finite_numbers_are_refused_at_write() {
+        for x in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            for format in LANGUAGES {
+                for layout in LAYOUTS {
+                    let what = format!("{x} {format} {layout:?}");
+                    let in_plain = Floats {
+                        plain: x,
+                        maybe: None,
+                        body: "b".into(),
+                    };
+                    let err = to_string_with(&in_plain, format, layout).expect_err(&what);
+                    assert_eq!(err.kind(), ErrorKind::FrontMatter, "{what}: {err}");
+                    let in_maybe = Floats {
+                        plain: 1.0,
+                        maybe: Some(x),
+                        body: "b".into(),
+                    };
+                    let err = to_string_with(&in_maybe, format, layout).expect_err(&what);
+                    assert_eq!(err.kind(), ErrorKind::FrontMatter, "{what}: {err}");
+                    let body = FloatBody {
+                        title: "t".into(),
+                        n: x,
+                    };
+                    let err = to_string_with(&body, format, layout).expect_err(&what);
+                    assert_eq!(err.kind(), ErrorKind::Body, "{what}: {err}");
+                    let body = OptFloatBody {
+                        title: "t".into(),
+                        n: Some(x),
+                    };
+                    let err = to_string_with(&body, format, layout).expect_err(&what);
+                    assert_eq!(err.kind(), ErrorKind::Body, "{what}: {err}");
+                }
+            }
+        }
+        let finite = Floats {
+            plain: 1.5,
+            maybe: Some(-2.0),
+            body: "b".into(),
+        };
+        round_trips_or_is_refused(&finite, "finite floats");
+    }
+
+    #[test]
+    fn non_finite_numbers_are_refused_on_read() {
+        for (lang, inf, nan) in [("yaml", ".inf", ".nan"), ("toml", "inf", "nan")] {
+            let sep = if lang == "yaml" { ": " } else { " = " };
+            for literal in [inf, nan] {
+                let md = format!("```{lang}\nplain{sep}1.0\nmaybe{sep}{literal}\n```\nb");
+                let err = from_str::<Floats>(&md).expect_err(&md);
+                assert_eq!(err.kind(), ErrorKind::FrontMatter, "{md}: {err}");
+                assert!(err.to_string().to_lowercase().contains("finite"), "{err}");
+                let md = format!("```{lang}\nplain{sep}{literal}\n```\nb");
+                let err = from_str::<Floats>(&md).expect_err(&md);
+                assert_eq!(err.kind(), ErrorKind::FrontMatter, "{md}: {err}");
+            }
+        }
+        let err = from_str::<FloatBody>("```yaml\ntitle: t\n```\n.inf").expect_err("body");
+        assert_eq!(err.kind(), ErrorKind::Body, "{err}");
+        let err = from_str::<OptFloatBody>("```yaml\ntitle: t\n```\n-.inf").expect_err("body");
+        assert_eq!(err.kind(), ErrorKind::Body, "{err}");
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct Keys {
+        by_u32: BTreeMap<u32, String>,
+        by_i64: BTreeMap<i64, String>,
+        by_bool: BTreeMap<bool, String>,
+        #[markdown(body)]
+        body: String,
+    }
+
+    #[test]
+    fn non_string_map_keys_read_in_every_language() {
+        let value = Keys {
+            by_u32: BTreeMap::from([(1, "a".into()), (4_000_000_000, "b".into())]),
+            by_i64: BTreeMap::from([(-5, "c".into()), (7, "d".into())]),
+            by_bool: BTreeMap::from([(false, "e".into()), (true, "f".into())]),
+            body: "Body.".into(),
+        };
+        for format in [Format::Yaml, Format::Json] {
+            for layout in LAYOUTS {
+                let md = to_string_with(&value, format, layout)
+                    .unwrap_or_else(|err| panic!("{format} {layout:?}: {err}"));
+                let back: Keys =
+                    from_str(&md).unwrap_or_else(|err| panic!("{format} {layout:?}: {err}\n{md}"));
+                assert_eq!(back, value, "{format} {layout:?}:\n{md}");
+            }
+        }
+        // TOML keys are strings, so a document written by hand holds them.
+        let md = "```toml\n[by_u32]\n1 = \"a\"\n[by_i64]\n\"-5\" = \"c\"\n[by_bool]\ntrue = \"f\"\n```\nBody.";
+        let back: Keys = from_str(md).expect("toml keys");
+        assert_eq!(back.by_u32, BTreeMap::from([(1, "a".to_owned())]));
+        assert_eq!(back.by_i64, BTreeMap::from([(-5, "c".to_owned())]));
+        assert_eq!(back.by_bool, BTreeMap::from([(true, "f".to_owned())]));
+    }
+
+    #[test]
+    fn toml_writes_non_string_keys_and_reads_them_back_or_refuses() {
+        let value = Keys {
+            by_u32: BTreeMap::from([(1, "a".into())]),
+            by_i64: BTreeMap::from([(-5, "c".into())]),
+            by_bool: BTreeMap::from([(true, "f".into())]),
+            body: "Body.".into(),
+        };
+        for layout in LAYOUTS {
+            match to_string_with(&value, Format::Toml, layout) {
+                Ok(md) => {
+                    let back: Keys = from_str(&md).unwrap_or_else(|err| panic!("{err}\n{md}"));
+                    assert_eq!(back, value, "{md}");
+                }
+                Err(err) => assert_eq!(err.kind(), ErrorKind::Type, "{err}"),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct Meta {
+        k: i32,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct TableOnly {
+        meta: Meta,
+        #[markdown(body)]
+        body: String,
+    }
+
+    #[test]
+    fn bare_toml_that_starts_with_a_table_round_trips() {
+        let value = TableOnly {
+            meta: Meta { k: 1 },
+            body: "b".into(),
+        };
+        let md = to_string_with(&value, Format::Toml, FieldsLayout::Bare).expect("write");
+        assert_eq!(md, "[meta]\nk = 1\n---\nb");
+        assert_eq!(from_str::<TableOnly>(&md).expect("read"), value);
+        round_trips_or_is_refused(&value, "table only");
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct OnlyBody {
+        #[markdown(body)]
+        text: String,
+    }
+
+    #[test]
+    fn a_body_only_document_that_starts_like_a_link_or_prose_is_body() {
+        for text in [
+            "[text](url) more",
+            "[text](url) more\nsecond line",
+            "[ref]: http://example.com",
+            "E = mc² is famous",
+            "x = oops",
+            "[1, 2] is a pair",
+        ] {
+            let back: OnlyBody = from_str(text).unwrap_or_else(|err| panic!("{text:?}: {err}"));
+            assert_eq!(back.text, text);
+            for format in LANGUAGES {
+                let value = OnlyBody { text: text.into() };
+                let md = to_string_with(&value, format, FieldsLayout::Fenced)
+                    .unwrap_or_else(|err| panic!("{text:?} {format}: {err}"));
+                assert_eq!(md, text, "no empty fields block is needed for {text:?}");
+            }
+        }
+        // A line that is a TOML header or `key = value` is read as fields,
+        // so the writer puts the empty fields block first.
+        for text in [
+            "[note]\nmore",
+            "[[a.b]]\nx",
+            "n = 5\nrest",
+            "'k' = \"v\" # c\nrest",
+        ] {
+            let value = OnlyBody { text: text.into() };
+            for format in LANGUAGES {
+                let md = to_string_with(&value, format, FieldsLayout::Fenced)
+                    .unwrap_or_else(|err| panic!("{text:?} {format}: {err}"));
+                let back: OnlyBody = from_str(&md).unwrap_or_else(|err| panic!("{err}\n{md}"));
+                assert_eq!(back, value, "{text:?} {format}:\n{md}");
+            }
+        }
+    }
+
+    #[derive(Debug, PartialEq, Deserialize, serde_markdown_derive::Markdown)]
+    #[serde(deny_unknown_fields)]
+    struct Strict {
+        title: String,
+        #[markdown(body)]
+        body: String,
+    }
+
+    #[test]
+    fn a_fields_key_named_like_a_body_field_is_a_type_error() {
+        let md = "```yaml\ntitle: t\nbody: sneaky\n```\nreal";
+        let err = from_str::<Strict>(md).expect_err("body key in the fields");
+        assert_eq!(err.kind(), ErrorKind::Type, "{err}");
+        assert!(err.to_string().contains("`body`"), "{err}");
+        assert!(err.to_string().contains("body field"), "{err}");
+        let err = from_str::<Flat>("```json\n{\"desc\": \"d\", \"body\": \"x\"}\n```\nreal")
+            .expect_err("body key in the fields");
+        assert_eq!(err.kind(), ErrorKind::Type, "{err}");
+    }
+
+    #[derive(Serialize)]
+    struct Ghost {
+        other: String,
+    }
+
+    impl Markdown for Ghost {
+        const BODY_FIELDS: &'static [&'static str] = &["missing"];
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct Skipping {
+        title: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[markdown(body)]
+        note: Option<String>,
+    }
+
+    #[test]
+    fn a_body_field_name_the_struct_does_not_have_is_a_type_error() {
+        let err = to_string(&Ghost { other: "x".into() })
+            .expect_err("BODY_FIELDS names a field the struct lacks");
+        assert_eq!(err.kind(), ErrorKind::Type, "{err}");
+        assert!(err.to_string().contains("`missing`"), "{err}");
+        // An optional body field that serde skips is still a field of the struct.
+        let value = Skipping {
+            title: "t".into(),
+            note: None,
+        };
+        let md = to_string(&value).expect("skipped optional body field");
+        assert_eq!(from_str::<Skipping>(&md).expect("read"), value);
+    }
+}
+
+/// Large byte and prose bodies are not run through a decoder that cannot
+/// read them as a list or as fields.
+#[cfg(all(feature = "yaml", feature = "json", feature = "toml"))]
+mod large_bodies {
+    use serde::{Deserialize, Serialize};
+
+    use crate::{FieldsLayout, Format, from_str, to_string_with};
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct Blob {
+        #[markdown(body)]
+        data: Vec<u8>,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, serde_markdown_derive::Markdown)]
+    struct Prose {
+        #[markdown(body)]
+        text: String,
+    }
+
+    /// Text that starts with a letter and is invalid YAML, JSON and TOML
+    /// further down, so a decoder that looked at it would fail or guess.
+    fn awkward(len: usize) -> String {
+        "Plain start, then \t: [ { \"unterminated\n= 1\n- not a list item\n".repeat(len)
+    }
+
+    #[test]
+    fn a_large_byte_body_round_trips_in_every_language() {
+        let value = Blob {
+            data: awkward(20_000).into_bytes(),
+        };
+        for format in [Format::Yaml, Format::Json, Format::Toml] {
+            for layout in [FieldsLayout::Fenced, FieldsLayout::Bare] {
+                let md = to_string_with(&value, format, layout).expect("write");
+                assert_eq!(from_str::<Blob>(&md).expect("read"), value, "{format}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_large_prose_body_is_a_body_only_document() {
+        let value = Prose {
+            text: awkward(20_000),
+        };
+        let md = to_string_with(&value, Format::Yaml, FieldsLayout::Fenced).expect("write");
+        assert!(md.starts_with("Plain start"), "no fields block was added");
+        assert_eq!(from_str::<Prose>(&md).expect("read"), value);
+    }
+}

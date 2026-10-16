@@ -87,8 +87,11 @@ The last body field keeps every byte, `---` lines included.
 
 Reading finds the fields block by itself: the first fenced `yaml` / `yml` /
 `json` / `toml` block, or a mapping before the first top-level `---` line.
-An unlabeled fence or a bare block is sniffed: `{` or `[` is JSON, a
-`key = value` line is TOML, anything else YAML. A later fence is ordinary body
+An unlabeled fence or a bare block is sniffed: `{` is JSON; a table header
+(`[key]`, `[[key]]`) or a `key = value` first line is TOML; anything else is
+YAML. A bare block that starts with `[` and is not a TOML header (a Markdown
+link, a list) is body, and so is prose such as `E = mc² is famous`; an
+unlabeled fence starting with `[` is JSON. A later fence is ordinary body
 text, and blank lines or `---` lines before the fields are skipped.
 
 ## Body fields
@@ -111,6 +114,7 @@ A body field may have any type. What its section holds follows from its
 | --- | --- |
 | `String`, or a type serialized as a string (`Timestamp`, `Duration`, …) | the text itself |
 | `Vec<u8>` | its bytes, as UTF-8 text |
+| a newtype around a string, a `char` | the text itself (a newtype around a struct or number stays structured) |
 | a unit enum variant | the variant's name |
 | numbers, structs, maps, lists, variants with content | encoded in the fields block's language (YAML when there is none) |
 
@@ -132,7 +136,11 @@ let json = to_string_with_format(&note, Format::Json)?; // a ```json fence
 let toml = to_string_with(&note, Format::Toml, FieldsLayout::Bare)?;
 ```
 
-The bare layout has no fence; a `---` line ends the fields:
+The bare layout has no fence; a `---` line ends the fields. A value whose
+text has a `---`, code fence, or HTML comment line cannot be written bare; the
+writer refuses it with `ErrorKind::FrontMatter`, and `FieldsLayout::Fenced`
+writes it (the fence grows past any backtick run in the fields). A block with
+no fields left (TOML, every field absent) is no block at all.
 
 ```markdown
 title = "Release notes"
@@ -161,11 +169,16 @@ not on its text:
 | `ErrorKind` | When |
 | --- | --- |
 | `Syntax` | a code fence before the last body section is not closed, or the bytes are not UTF-8; `error.offset()` is the byte offset |
-| `FrontMatter` | the fields block does not decode in its language; the decoder's error is the `source()` |
-| `Body` | a section does not fit its body field: a required one is missing or a structured one does not decode; on write, a value that is not the last would split on read |
-| `Type` | the value does not fit the document: a missing or mistyped key, or a root that is not a named struct |
-| `FormatDisabled` | the document's language is not compiled in |
+| `FrontMatter` | the fields block does not decode in its language (the decoder's error is the `source()`), or holds a number that is not finite; on write, a fields block that is not finite or would not read back as written (no `source()`) |
+| `Body` | a section does not fit its body field: a required one is missing or a structured one does not decode; on write, a value that is not the last would split on read, or a structured section holds a number that is not finite |
+| `Type` | the value does not fit the document: a missing or mistyped key, a fields key named like a body field, a body field the value never serializes, or a root that is not a named struct |
+| `FormatDisabled` | the document's language is not compiled in; on write, a body-only document that needs an empty fields block in a missing language |
 | `Io` | `to_writer` / `from_reader` I/O; the `std::io::Error` is the `source()` |
+
+`ErrorKind` is `#[non_exhaustive]`: a `match` needs a `_` arm. `Error` has no
+public constructor; in your own `Serialize` or `Deserialize` code build one
+with serde's `Error::custom` (it is `ErrorKind::Type`). A number that is not
+finite (`NaN`, an infinity) is refused on write in every language.
 
 ## Async API (tokio)
 
@@ -297,6 +310,12 @@ buf_deps(
 ```
 
 Repin the crate_universe lockfile after adding the annotation.
+
+`serde_markdown::PROTO_INCLUDE` is for Cargo builds. Under Bazel it holds an
+execution-root path fixed at compile time, not a directory a build script can
+rely on; a Bazel build script takes the directory from the annotated filegroup
+instead, as [`rust/examples/protobuf/BUILD.bazel`](rust/examples/protobuf/BUILD.bazel)
+does with the environment variable `SERDE_MARKDOWN_PROTO_INCLUDE`.
 
 ## Features
 

@@ -5,8 +5,8 @@ Version 0.1, 17 September 2026.
 Work order so the crate `serde_markdown` implements [DESIGN.md](DESIGN.md).
 The mapping is already locked: optional first fields block (fenced or
 bare YAML/JSON/TOML), then body sections split on top-level `---`,
-body fields marked explicitly. M0–M14 are done. M15 ships the two
-runnable example crates.
+body fields marked explicitly. M0–M16 are done. M15 ships the
+runnable example crates, M16 the async form.
 
 This is not a 1.0 release plan. v1 is 0.x. Compatible additions bump
 the patch; breaking API changes bump the minor ([CHANGELOG.md](CHANGELOG.md)).
@@ -23,7 +23,7 @@ Do not reopen those rows as new stages; M boxes implement them.
 
 **Stop after every stage.** The owner reviews that stage's result before
 the next stage starts. Spec stages (M0): the review artefact is the
-document diff. Implementation stages (M1–M15): the review artefact is the
+document diff. Implementation stages (M1–M16): the review artefact is the
 code + test diff, and `bazel test //...` is green. Do not start the next M
 stage from a verbal claim that the previous one is ready.
 
@@ -37,7 +37,7 @@ claim.
 | `[x]` | Spec: owner accepted the diff. Code: the check lives in the crate tests |
 
 Each stage has **Status:** `not started` | `in progress` | `done`. Set
-`done` only when every box in that stage is `[x]`. For M1–M15, Clippy is
+`done` only when every box in that stage is `[x]`. For M1–M16, Clippy is
 clean and `bazel test //...` has exited 0 on that tree.
 
 If DESIGN.md has not yet decided a path, a field option, a fence
@@ -45,7 +45,7 @@ language, or an error kind, stop. Amend DESIGN.md; do not invent a
 silent default in `src/`. Do not implement M2 against this charter
 alone.
 
-Order: M0 → M1 → … → M15. Do not interleave a later M stage with an
+Order: M0 → M1 → … → M16. Do not interleave a later M stage with an
 earlier one. M4 may add the derive crate during M3 only if ser/de does
 not use it yet; wiring is M5.
 
@@ -70,14 +70,14 @@ not use it yet; wiring is M5.
 | [M12](#m12-io-and-features) | done | `to_vec` / `from_slice` / writer; feature matrix |
 | [M13](#m13-documents-once) | done | DESIGN, README, CHANGELOG, this dashboard |
 | [M14](#m14-acceptance) | done | Golden round-trips; `bazel test //...` |
-| [M15](#m15-runnable-examples) | in progress | `rust/examples` binaries a caller can run |
-| [M16](#m16-async-form) | in progress | `serde_markdown::tokio`: native async twins (feature `tokio`) |
+| [M15](#m15-runnable-examples) | done | `rust/examples` binaries a caller can run |
+| [M16](#m16-async-form) | done | `serde_markdown::tokio`: native async twins (feature `tokio`) |
 
 ---
 
 ## 3. Locked decisions
 
-M2–M15 implement these. They live in DESIGN.md §12. Do not reopen them
+M2–M16 implement these. They live in DESIGN.md §12. Do not reopen them
 in a later M stage without amending DESIGN.md §12 and this section
 first.
 
@@ -118,9 +118,9 @@ to run them is in [README.md](README.md). M15 ships those crates.
 
 ---
 
-## 4. Out of M0–M15
+## 4. Out of M0–M16
 
-These must not block a stage in §2. Writes in M2–M15 must not depend on
+These must not block a stage in §2. Writes in M2–M16 must not depend on
 them.
 
 - Pandoc / Jekyll `---` YAML `---` front matter as an alternate syntax
@@ -170,19 +170,19 @@ Close only after M0 exists. The tree already compiled before this file.
 Do not reopen Bazel/Buf shape in a later M stage without amending
 DESIGN.md §6.5.
 
-- [x] Workspace crates `serde_markdown` and `serde-markdown-generated`
-      build (`cargo test -p serde_markdown`, `cargo test -p serde-markdown-generated`).
-- [x] `proto/markdown/options.proto` is proto3, package `markdown`,
+- [x] Workspace crates `serde_markdown` and `serde_markdown-proto`
+      build (`cargo test -p serde_markdown`, `cargo test -p serde_markdown-proto`).
+- [x] `rust/markdown/proto/markdown/options.proto` is proto3, package `markdown`,
       field `body = 20260917` on `FieldOptions`.
 - [x] `bazel run //proto/markdown:generate` writes
-      `rust/generated/markdown/`; `bazel test //proto/markdown:generate_test`
+      `rust/proto/markdown/`; `bazel test //proto/markdown:generate_test`
       and `//proto/markdown:lint` pass.
 - [x] Fixture messages live in `proto/markdown/testdata/` (not the public
       `markdown` API). Golden Markdown lives in
-      `rust/serde_markdown/testdata/markdown/`. Hand-written structs and
-      constructors live in `rust/serde_markdown/src/testdata/`.
+      `rust/markdown/testdata/markdown/`. Hand-written structs and
+      constructors live in `rust/markdown/src/testdata/`.
 - [x] `bazel test //rust:lint` `//bazel:lint` `//bazel:markdown` pass.
-- [x] Public API is still a stub (`DESIGN` const). No `from_str` /
+- [x] Public API is still a stub (a `DESIGN` const, removed in 0.5.0). No `from_str` /
       `to_string` yet.
 
 **Review:** skeleton. Stop. Do not start parse in this stage.
@@ -294,7 +294,7 @@ Close only after M4. Hand-written structs only. Default serialize:
       `types::Page` without `published` (`page.fenced.yaml.md` as
       deserialize input; serialize need not be byte-identical).
 - [x] Fence language on serialize is labeled `yaml`. One newline after
-      the closing fence; separator `\n---\n`; trailing newline at EOF;
+      the closing fence; separator `\n---\n`; no newline added at EOF;
       no leading blank line; no trailing `---` after the last section
       (DESIGN.md §8).
 - [x] Body `String` sections are raw (no extra quotes). Front-matter
@@ -375,7 +375,8 @@ Close only after M7. Use `types::OptionalBody` and
       (`optional.leading_none.md`).
 - [x] `Some("")` is a section whose content is the two characters `""`
       (`optional.empty_string.md`).
-- [x] Extra trailing sections → `Body` (too many). Missing section for
+- [x] Extra `---` lines belong to the last field (no too-many error).
+      Missing section for
       a required body field → `Body`. Empty section for a required
       structured type → `Body` (may wait for M9 if no fixture yet).
 - [x] `bazel test //...` green. Owner has reviewed the diff.
@@ -468,8 +469,8 @@ Close only after M11.
 
 - [x] `to_vec` / `to_writer` / `from_slice` / `from_reader` match
       `to_string` / `from_str`. `from_slice` fails on invalid UTF-8.
-- [x] rustdoc on the public surface points at DESIGN.md for the
-      mapping; examples use `Page` or a 5-line struct.
+- [x] rustdoc on the public surface states the mapping itself;
+      examples use `Page` or a 5-line struct.
 - [x] Feature matrix: default features include yaml/json/toml as in
       DESIGN.md §5.1 (derive/buffa as decided in M4/M11). Disabled
       format still `FormatDisabled`.
@@ -523,7 +524,7 @@ Close only after M13.
 
 ## M15. Runnable examples
 
-**Status:** in progress
+**Status:** done
 
 **Codes:** DESIGN.md §2.1, §3.1–3.2.
 
@@ -545,7 +546,7 @@ embed those programs in this file. Mapping is unchanged.
 - [x] README and DESIGN.md layout name `rust/examples/`. This file's
       dashboard row is this stage. Tests cover both binaries
       (round-trip and the printed document).
-- [ ] `bazel test //...` green (includes `//rust:lint`). Owner has
+- [x] `bazel test //...` green (includes `//rust:lint`). Owner has
       reviewed.
 
 **Review:** runnable examples. Stop.
@@ -554,7 +555,7 @@ embed those programs in this file. Mapping is unchanged.
 
 ## M16. Async form
 
-**Status:** in progress
+**Status:** done
 
 **Codes:** DESIGN.md §5 (Async form), §6.4.
 
@@ -581,7 +582,7 @@ same documents.
       parallel tasks on a multi-thread runtime. `cargo run -p
       example-tokio` and `bazel run //rust/examples/tokio`. Proof:
       `//rust/examples/tokio:lib_test`.
-- [ ] `bazel test //...` green (the library targets build with `tokio`).
+- [x] `bazel test //...` green (the library targets build with `tokio`).
       Owner has reviewed.
 
 **Review:** async form. Stop.

@@ -37,17 +37,26 @@ pub enum FieldsLayout {
     /// Fenced code block (default serialize: ` ```yaml `).
     #[default]
     Fenced,
-    /// Unfenced mapping; a `---` separator is written before the first body section.
+    /// Unfenced mapping; a `---` separator is written before the first body
+    /// section. The mapping must read back as written: a value that would
+    /// not is refused at write with [`crate::ErrorKind::FrontMatter`].
     Bare,
+}
+
+impl Format {
+    /// The fence language label of this format: `yaml`, `json`, or `toml`.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Yaml => "yaml",
+            Self::Json => "json",
+            Self::Toml => "toml",
+        }
+    }
 }
 
 impl fmt::Display for Format {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match *self {
-            Self::Yaml => "yaml",
-            Self::Json => "json",
-            Self::Toml => "toml",
-        })
+        f.write_str(self.as_str())
     }
 }
 

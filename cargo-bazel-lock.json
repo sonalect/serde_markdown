@@ -1,5 +1,5 @@
 {
-  "checksum": "210a98374e30fdf3e99be9c5a8865d61501ff7579d73439bede3f8723625d619",
+  "checksum": "d4f588c65cb3e9af5d8a2c90209d4f2cbeb02945338c0122759fefed336e4fb2",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -742,7 +742,7 @@
       ],
       "version": "0.3.14"
     },
-    "example-page 0.4.1": {
+    "example-page 0.5.0": {
       "common_attrs": {
         "deps": [
           {
@@ -768,9 +768,9 @@
           }
         }
       ],
-      "version": "0.4.1"
+      "version": "0.5.0"
     },
-    "example-protobuf 0.4.1": {
+    "example-protobuf 0.5.0": {
       "build_script_attrs": {
         "deps": [
           {
@@ -829,9 +829,9 @@
           }
         }
       ],
-      "version": "0.4.1"
+      "version": "0.5.0"
     },
-    "example-tokio 0.4.1": {
+    "example-tokio 0.5.0": {
       "common_attrs": {
         "deps": [
           {
@@ -861,7 +861,7 @@
           }
         }
       ],
-      "version": "0.4.1"
+      "version": "0.5.0"
     },
     "fastrand 2.5.0": {
       "common_attrs": {
@@ -2364,7 +2364,7 @@
       ],
       "version": "1.0.151"
     },
-    "serde_markdown 0.4.1": {
+    "serde_markdown 0.5.0": {
       "common_attrs": {
         "crate_features": [
           "buffa",
@@ -2431,9 +2431,9 @@
           }
         }
       ],
-      "version": "0.4.1"
+      "version": "0.5.0"
     },
-    "serde_markdown-proto 0.4.1": {
+    "serde_markdown-proto 0.5.0": {
       "common_attrs": {
         "deps": [
           {
@@ -2471,9 +2471,9 @@
           }
         }
       ],
-      "version": "0.4.1"
+      "version": "0.5.0"
     },
-    "serde_markdown_derive 0.4.1": {
+    "serde_markdown_derive 0.5.0": {
       "common_attrs": {
         "deps": [
           {
@@ -2507,7 +2507,7 @@
           }
         }
       ],
-      "version": "0.4.1"
+      "version": "0.5.0"
     },
     "serde_spanned 1.1.2": {
       "common_attrs": {
@@ -3398,11 +3398,11 @@
   ],
   "direct_dev_deps": [],
   "workspace_members": {
-    "example-page 0.4.1": "rust/examples/page",
-    "example-protobuf 0.4.1": "rust/examples/protobuf",
-    "example-tokio 0.4.1": "rust/examples/tokio",
-    "serde_markdown 0.4.1": "rust/markdown",
-    "serde_markdown-proto 0.4.1": "rust/proto",
-    "serde_markdown_derive 0.4.1": "rust/markdown_derive"
+    "example-page 0.5.0": "rust/examples/page",
+    "example-protobuf 0.5.0": "rust/examples/protobuf",
+    "example-tokio 0.5.0": "rust/examples/tokio",
+    "serde_markdown 0.5.0": "rust/markdown",
+    "serde_markdown-proto 0.5.0": "rust/proto",
+    "serde_markdown_derive 0.5.0": "rust/markdown_derive"
   }
 }

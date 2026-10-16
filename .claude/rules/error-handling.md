@@ -16,10 +16,10 @@ Callers match `kind()`; they never parse `Display`.
 | Kind | When |
 | - | - |
 | `Syntax` | Unclosed fence, bad info string, scan failure, invalid UTF-8 on `from_slice`. `offset()` is `Some`. |
-| `FrontMatter` | Decoder error on the fields slice. `source()` is the decoder. |
-| `Body` | Section count, empty required structured section, invalid UTF-8 on `Vec<u8>` serialize, a body value that cannot be read back, decoder error on a structured body section (`source()` set). |
-| `Type` | Root is not a named struct; mapping-layer Serde `custom` / `missing_field`. |
-| `FormatDisabled` | Fence language not in compiled features. |
+| `FrontMatter` | Decoder error on the fields slice (`source()` is the decoder); at write, a fields block that cannot be written (non-finite number, would not read back; no source). |
+| `Body` | Section count, empty required structured section, invalid UTF-8 on `Vec<u8>` serialize, a body value that cannot be read back (write-time refusal), a non-finite number in a structured section, decoder error on a structured body section (`source()` set). |
+| `Type` | Root is not a named struct; mapping-layer Serde `custom` / `missing_field`, a fields key named like a body field, a `BODY_FIELDS` name never serialized. |
+| `FormatDisabled` | Fence language not in compiled features (read; also write of a body-only document that needs a block in a missing language). |
 | `Io` | `to_writer` / `from_reader`. `source()` is `std::io::Error`. |
 
 Do not add a kind unless `DESIGN.md` §7 / §12 is amended first. No second

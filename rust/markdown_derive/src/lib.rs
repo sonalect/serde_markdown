@@ -16,7 +16,9 @@ use syn::{
 
 /// Implements `serde_markdown::Markdown` for a named struct.
 ///
-/// Body fields are those tagged `#[markdown(body)]`. Each name is the
+/// Body fields are those tagged `#[markdown(body)]`. A body field with
+/// `#[serde(skip)]`, `skip_serializing`, or `skip_deserializing` is a compile
+/// error: serde would not write or not read its section. Each name is the
 /// Serde field name: the field's `rename`, else the struct's `rename_all`
 /// applied to the field name (a raw identifier loses its `r#`). A body field
 /// whose serialize and deserialize names differ is a compile error, since
@@ -36,6 +38,7 @@ fn expand(input: DeriveInput) -> Result<proc_macro2::TokenStream> {
     let mut body_names = Vec::new();
     for field in fields {
         if is_markdown_body(field)? {
+            reject_skipped(field)?;
             let name = serde_field_name(field, &rename_all)?;
             body_names.push(LitStr::new(&name, proc_macro2::Span::call_site()));
         }
@@ -92,6 +95,25 @@ fn is_markdown_body(field: &Field) -> Result<bool> {
         }
     }
     Ok(marked)
+}
+
+/// A body field serde skips cannot be written or read as a section.
+fn reject_skipped(field: &Field) -> Result<()> {
+    for meta in serde_metas(&field.attrs) {
+        let path = meta.path();
+        if path.is_ident("skip")
+            || path.is_ident("skip_serializing")
+            || path.is_ident("skip_deserializing")
+        {
+            return Err(syn::Error::new_spanned(
+                path,
+                "a Markdown body field cannot be skipped by serde: its section would be \
+                 dropped on write or never read; use `skip_serializing_if` or `default` \
+                 for an optional body field",
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn expected_body(tokens: impl quote::ToTokens) -> syn::Error {
@@ -304,5 +326,68 @@ fn lit_str(expr: &Expr) -> Option<LitStr> {
             lit: Lit::Str(lit), ..
         }) => Some(lit.clone()),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use quote::quote;
+    use syn::{DeriveInput, parse_quote};
+
+    use super::expand;
+
+    fn body_fields_of(input: DeriveInput) -> String {
+        expand(input).expect("expands").to_string()
+    }
+
+    #[test]
+    fn body_fields_keep_their_serde_names_in_declaration_order() {
+        let out = body_fields_of(parse_quote! {
+            #[serde(rename_all = "camelCase")]
+            struct Page {
+                page_title: String,
+                #[markdown(body)]
+                body_note: String,
+                #[serde(default, skip_serializing_if = "Option::is_none")]
+                #[markdown(body)]
+                #[serde(rename = "kept")]
+                renamed: Option<String>,
+            }
+        });
+        let expected = quote! {
+            impl ::serde_markdown::Markdown for Page {
+                const BODY_FIELDS: &'static [&'static str] = &["bodyNote", "kept"];
+            }
+        };
+        assert_eq!(out, expected.to_string());
+    }
+
+    #[test]
+    fn a_body_field_serde_skips_is_a_compile_error() {
+        for skip in ["skip", "skip_serializing", "skip_deserializing"] {
+            let skip = syn::Ident::new(skip, proc_macro2::Span::call_site());
+            let input: DeriveInput = parse_quote! {
+                struct Page {
+                    #[serde(#skip)]
+                    #[markdown(body)]
+                    note: String,
+                }
+            };
+            let err = expand(input).expect_err("a skipped body field");
+            assert!(err.to_string().contains("cannot be skipped"), "{err}");
+        }
+    }
+
+    #[test]
+    fn a_skipped_front_matter_field_is_fine() {
+        let out = body_fields_of(parse_quote! {
+            struct Page {
+                #[serde(skip)]
+                cache: u32,
+                #[markdown(body)]
+                body: String,
+            }
+        });
+        assert!(out.contains("\"body\""), "{out}");
     }
 }

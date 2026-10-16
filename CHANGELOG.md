@@ -8,6 +8,92 @@ API changes bump the minor.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-16
+
+### Added
+
+- Bazel test targets for the builds with only `tokio` and only `buffa`
+  (`serde_markdown_tokio_only`, `serde_markdown_buffa_only`), next to the
+  all-features, `no_json`, `no_toml`, `no_yaml`, and `minimal` builds.
+
+### Changed
+
+- **Breaking:** a key of the fields block that is named like a body field is
+  `ErrorKind::Type` on read (the message names the key). Before, the key was
+  dropped without a word, even from a type with `deny_unknown_fields`.
+- **Breaking:** a number that is not finite (`.inf`, `.nan`, `inf`, `nan`) is
+  an error on read: `ErrorKind::FrontMatter` in the fields block,
+  `ErrorKind::Body` in a structured body section. Before, it read as an
+  absent value (`None`). The writer refuses such a number in every language
+  (JSON used to write `null`): `ErrorKind::FrontMatter` in the fields block,
+  `ErrorKind::Body` in a structured body section.
+- **Breaking:** the writer refuses a fields block that a reader would not
+  read back as written: `ErrorKind::FrontMatter` with no source. In the bare
+  layout this is a string holding a `---`, fence, or HTML comment line, or
+  any value whose encoding the reader would split or take for body; the
+  message says to write it with `FieldsLayout::Fenced`.
+- **Breaking:** a `Markdown::BODY_FIELDS` name that the value never
+  serializes (not even skipped) is `ErrorKind::Type` at write. A manual impl
+  that named a missing field silently lost its section before.
+- **Breaking:** `#[derive(Markdown)]` rejects a body field that carries
+  `#[serde(skip)]`, `skip_serializing`, or `skip_deserializing` (compile
+  error); use `skip_serializing_if` and `default` for an optional body field.
+- **Breaking:** the constructors `Error::syntax`, `Error::front_matter`,
+  `Error::body`, `Error::body_source`, `Error::type_error`,
+  `Error::format_disabled`, and `Error::io` are no longer public. Errors are
+  made by the crate; read them with `kind()`, `offset()`, `Display`, and
+  `source()`. To make one in your own `Serialize` or `Deserialize` code, use
+  serde's `Error::custom`, which gives `ErrorKind::Type`. `?` on an
+  `std::io::Error` still converts, through `From<io::Error>`.
+- **Breaking:** `ErrorKind` is `#[non_exhaustive]`. A `match` on it needs a
+  `_` arm, so a kind added later does not break your build.
+- Format sniffing is strict. `{` is JSON. TOML is chosen only for a table
+  header (`[key]`, `[[key]]`) or a `key = value` first line whose value
+  starts like a TOML value. A bare first slice that starts with `[` and is
+  not a table header (a Markdown link, a list) is body, with no decoder
+  run; an unlabeled fence starting with `[` is still JSON. A body-only
+  document starting with `[text](url) more` or `E = mc² is famous` no longer
+  fails with `ErrorKind::FrontMatter`.
+- A map key that is not a string (`BTreeMap<u32, _>`, `i64`, `bool`) reads
+  in every language. Reading goes through `serde_json::Value` as the
+  deserializer.
+- A `Vec<u8>` body is no longer decoded as a document to find out whether it
+  is a list, unless it starts like one (`[` or `-` after whitespace and `#`
+  comment lines). A body-only document is no longer decoded as YAML unless
+  its first line can start a mapping (it has a `:`, or starts with `?`, `{`,
+  `!`, `&`, `*`, or `%`). Results are the same; a 6 MB body is read and
+  written about twice as fast.
+- The CommonMark parser stops after the last separator that splits the
+  earlier body fields, so the verbatim last body field is not parsed. A 6 MB
+  last field reads about three times as fast.
+- `serde_markdown::PROTO_INCLUDE` is for Cargo builds; under Bazel a build
+  script takes the directory from the annotated filegroup (README, "The
+  option in Bazel").
+- DESIGN.md, README, and ROADMAP.md match the code (sniffing, the fields
+  fence, errors, tests, M15 and M16 done).
+
+### Removed
+
+- **Breaking:** `serde_markdown::DESIGN`, the constant holding the file name
+  `DESIGN.md`. It had no use in code.
+
+### Fixed
+
+- A fenced fields block whose encoded text has a line of backticks (a YAML
+  or TOML string holding a fence) closed early and read back with no error
+  as different data. The fence is now longer than any such run.
+- `FieldsLayout::Bare` with TOML and every field absent wrote a stray
+  `---` and read back the body shifted. An empty bare block is now no block.
+- A bare TOML block that starts with a table (`[meta]`) was sniffed as JSON
+  and failed to read back.
+- A newtype body field (`struct Title(String)`) was read through the YAML
+  parser (`"# Title\n\n- item"` came back as `"item"`), and a `char` body
+  field `#`, `-`, or `~` failed. Both are now raw section text; a newtype
+  around a struct or a number is still read in the fence language.
+- A body-only document that needs an explicit empty fields block, written by
+  a build without that language, wrote a block its own reader refuses. It
+  is now `ErrorKind::FormatDisabled` at write.
+
 ## [0.4.1] - 2026-10-12
 
 ### Changed
@@ -313,6 +399,8 @@ API changes bump the minor.
 ## Links
 
 - [Unreleased]
+- [0.5.0]
+- [0.4.1]
 - [0.4.0]
 - [0.3.1]
 - [0.3.0]
@@ -323,7 +411,8 @@ API changes bump the minor.
 - [0.1.1]
 - [0.1.0]
 
-[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/sonalect/serde_markdown/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/sonalect/serde_markdown/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/sonalect/serde_markdown/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/sonalect/serde_markdown/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/sonalect/serde_markdown/compare/v0.3.0...v0.3.1

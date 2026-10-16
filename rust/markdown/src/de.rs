@@ -6,26 +6,27 @@ use std::marker::PhantomData;
 use std::vec;
 
 use serde::de::value::{StrDeserializer, StringDeserializer};
-use serde::de::{
-    DeserializeOwned, DeserializeSeed, Deserializer, EnumAccess, MapAccess, SeqAccess,
-    VariantAccess, Visitor,
-};
+use serde::de::{DeserializeOwned, DeserializeSeed, Deserializer, MapAccess, SeqAccess, Visitor};
 use serde_json::{Map, Value};
 
 use crate::drive::{self, Steps};
 use crate::error::{Error, ErrorKind};
 use crate::format::{self, Format};
 use crate::markdown::Markdown;
-use crate::parse::{self, Document, Fields};
+use crate::parse::{self, Document, EMPTY_STRING_SECTION, Fields};
 
 /// Deserialize a Markdown document from `s`.
 ///
 /// The optional fields block is the first fenced `yaml` / `yml` / `json` /
 /// `toml` code block, or a **bare** mapping before the first top-level `---`.
-/// An unlabeled first fence and a bare first slice are sniffed: `{` / `[`
-/// means JSON, a TOML-shaped first line means TOML, otherwise YAML. A sniffed
-/// JSON or TOML parse failure is [`ErrorKind::FrontMatter`] and does not fall
-/// back to YAML. A bare first slice that is not a mapping is the first body
+/// An unlabeled first fence and a bare first slice are sniffed: `{` means
+/// JSON; TOML only when the first significant line is a table header
+/// (`[key]`, `[[key]]`) or a `key = value` line whose value starts like a TOML
+/// value; otherwise YAML. An unlabeled fence that starts with `[` is JSON; a
+/// bare first slice that starts with `[` and is not a TOML table header (a
+/// Markdown link, a list) is body, with no decoder run on it. A sniffed JSON
+/// or TOML parse failure is [`ErrorKind::FrontMatter`] and does not fall back
+/// to YAML. A bare first slice that is not a mapping is the first body
 /// section. Leading Unicode whitespace and top-level `---` before fields are
 /// discarded only when fields follow; a document with no fields is body from
 /// its first byte, nothing skipped. A fenced `yaml` block that is not first
@@ -35,13 +36,23 @@ use crate::parse::{self, Document, Fields};
 /// in declaration order. Section text is verbatim: of the bytes between two
 /// separators only the one line break that ends the section is dropped, and
 /// nothing is trimmed. The last body field is every byte after its separator
-/// up to the end of the document, never parsed, so it may hold `---` lines,
-/// code fences, tables, and setext underlines; the earlier fields end at the
+/// up to the end of the document, never split or trimmed, so it may hold
+/// `---` lines, code fences, tables, and setext underlines; the earlier fields end at the
 /// first top-level `---` lines. `String` / bytes sections are the raw section
 /// text. Types whose proto3 JSON serde is a string (well-known `Timestamp`,
 /// `Duration`, `FieldMask`) read that same raw text. Nested structs, maps,
 /// sequences, and scalars parse as the fields format when a fields block was
 /// present, otherwise YAML.
+///
+/// A key of the fields block that names a body field is [`ErrorKind::Type`]:
+/// that field is read from its section, and the key would otherwise be
+/// dropped silently, even from a type that denies unknown fields. A number
+/// that is not finite (`.inf`, `.nan`, `inf`, `nan`) in the fields block is
+/// [`ErrorKind::FrontMatter`], and in a structured body section
+/// [`ErrorKind::Body`]. A map key is read as the key type asks: `u32`, `i64`,
+/// and `bool` keys are read from their text in every language. A newtype
+/// body field is read like its content (a newtype around a string is raw
+/// text) and a `char` body field is raw text.
 ///
 /// Protobuf `Any` packing is not installed here. Callers who need `Any` must
 /// install a type registry (`buffa_types::register_wkt_types`) the same way
@@ -227,10 +238,6 @@ fn mapping_from_value(value: Value) -> Option<Map<String, Value>> {
     }
 }
 
-/// Two characters that stand for `Some("")` in a section that is not the
-/// last (an empty section there is `None`).
-const EMPTY_STRING_SECTION: &str = "\"\"";
-
 enum SectionSlot {
     /// The document has no such section.
     Absent,
@@ -281,7 +288,7 @@ impl<'de> Deserializer<'de> for RootDe<'_> {
     }
 
     fn deserialize_map<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        visitor.visit_map(RootMap::new(self))
+        visitor.visit_map(RootMap::new(self)?)
     }
 
     fn deserialize_struct<V: Visitor<'de>>(
@@ -304,17 +311,25 @@ impl<'de> Deserializer<'de> for RootDe<'_> {
     }
 }
 
+/// One key the value is handed, with what its value is made from.
 enum Pending {
-    Front(String),
+    /// A key of the fields block, with its decoded value.
+    Front(String, Value),
+    /// A body field and the index of its section.
     Body { name: &'static str, index: usize },
 }
 
+/// What the value of the key just handed over is made from.
+enum Current {
+    Front(Value),
+    Body(usize),
+}
+
 struct RootMap<'a> {
-    fields: Map<String, Value>,
     slots: Vec<SectionSlot>,
     format: Format,
     pending: vec::IntoIter<Pending>,
-    current: Option<Pending>,
+    current: Option<Current>,
     finished: &'a Cell<bool>,
 }
 
@@ -322,27 +337,36 @@ impl<'a> RootMap<'a> {
     /// The keys handed to the value: every key of the fields block that is
     /// not a body field, then each body field the document has a section
     /// for. A body field without a section is left out, so the value's own
-    /// `default` or `Option` applies.
-    fn new(root: RootDe<'a>) -> Self {
+    /// `default` or `Option` applies. Keys and values move out of the
+    /// fields block; nothing is cloned.
+    ///
+    /// A key of the fields block named like a body field is a
+    /// [`ErrorKind::Type`] error: the field is read from its section, so
+    /// the key would be dropped without a word, even from a type that
+    /// denies unknown fields.
+    fn new(root: RootDe<'a>) -> Result<Self, Error> {
         let mut pending = Vec::with_capacity(root.fields.len() + root.body_fields.len());
-        for key in root.fields.keys() {
-            if !root.body_fields.contains(&key.as_str()) {
-                pending.push(Pending::Front(key.clone()));
+        for (key, value) in root.fields {
+            if root.body_fields.contains(&key.as_str()) {
+                return Err(Error::type_error(format!(
+                    "the fields block has the key `{key}`, which is a body field; \
+                     a body field is read from its section of the document"
+                )));
             }
+            pending.push(Pending::Front(key, value));
         }
         for (index, name) in root.body_fields.iter().enumerate() {
             if !matches!(root.slots.get(index), None | Some(SectionSlot::Absent)) {
                 pending.push(Pending::Body { name, index });
             }
         }
-        Self {
-            fields: root.fields,
+        Ok(Self {
             slots: root.slots,
             format: root.format,
             pending: pending.into_iter(),
             current: None,
             finished: root.finished,
-        }
+        })
     }
 }
 
@@ -358,13 +382,13 @@ impl<'de> MapAccess<'de> for RootMap<'_> {
                 self.finished.set(true);
                 Ok(None)
             }
-            Some(Pending::Front(key)) => {
-                self.current = Some(Pending::Front(key.clone()));
+            Some(Pending::Front(key, value)) => {
+                self.current = Some(Current::Front(value));
                 seed.deserialize(StringDeserializer::<Error>::new(key))
                     .map(Some)
             }
             Some(Pending::Body { name, index }) => {
-                self.current = Some(Pending::Body { name, index });
+                self.current = Some(Current::Body(index));
                 seed.deserialize(StrDeserializer::<Error>::new(name))
                     .map(Some)
             }
@@ -376,11 +400,8 @@ impl<'de> MapAccess<'de> for RootMap<'_> {
         V: DeserializeSeed<'de>,
     {
         match self.current.take() {
-            Some(Pending::Front(key)) => {
-                let value = self.fields.remove(&key).unwrap_or(Value::Null);
-                seed.deserialize(JsonDe(value))
-            }
-            Some(Pending::Body { index, .. }) => {
+            Some(Current::Front(value)) => seed.deserialize(value).map_err(json_err),
+            Some(Current::Body(index)) => {
                 let slot = self
                     .slots
                     .get_mut(index)
@@ -403,18 +424,15 @@ struct SectionDeserializer {
 }
 
 impl SectionDeserializer {
-    fn parsed(self) -> Result<JsonDe, Error> {
+    fn parsed(self) -> Result<Value, Error> {
         match self.slot {
             SectionSlot::Absent => Err(Error::body("missing section")),
             SectionSlot::Empty => Err(Error::body("empty section for required structured field")),
             SectionSlot::Text(text) if text.is_empty() => {
                 Err(Error::body("empty section for required structured field"))
             }
-            SectionSlot::QuotedEmpty => Ok(JsonDe(format::load_body(
-                EMPTY_STRING_SECTION,
-                self.format,
-            )?)),
-            SectionSlot::Text(text) => Ok(JsonDe(format::load_body(&text, self.format)?)),
+            SectionSlot::QuotedEmpty => format::load_body(EMPTY_STRING_SECTION, self.format),
+            SectionSlot::Text(text) => format::load_body(&text, self.format),
         }
     }
 }
@@ -423,7 +441,9 @@ impl<'de> Deserializer<'de> for SectionDeserializer {
     type Error = Error;
 
     fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        self.parsed()?.deserialize_any(visitor).map_err(into_body)
+        self.parsed()?
+            .deserialize_any(visitor)
+            .map_err(|err| into_body(json_err(err)))
     }
 
     fn deserialize_str<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
@@ -472,19 +492,23 @@ impl<'de> Deserializer<'de> for SectionDeserializer {
     fn deserialize_seq<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
         match self.slot {
             SectionSlot::Absent => Err(Error::body("missing section")),
-            SectionSlot::Empty => visitor.visit_seq(JsonSeq {
-                iter: Vec::new().into_iter(),
-            }),
+            SectionSlot::Empty => Value::Array(Vec::new())
+                .deserialize_seq(visitor)
+                .map_err(json_err),
             SectionSlot::QuotedEmpty => visitor.visit_seq(ByteSeq {
                 iter: EMPTY_STRING_SECTION.as_bytes().to_vec().into_iter(),
             }),
             // Text that reads as a sequence is ambiguous: a `Vec<u8>` is
             // written as its raw text, any other sequence in the fence
             // language. The element type decides, at the first element.
+            // Text that cannot start a list is raw bytes without a decode.
+            SectionSlot::Text(text) if !parse::may_be_list(&text) => visitor.visit_seq(ByteSeq {
+                iter: text.into_bytes().into_iter(),
+            }),
             SectionSlot::Text(text) => match format::load_body(&text, self.format) {
-                Ok(Value::Array(values)) if values.is_empty() => visitor.visit_seq(JsonSeq {
-                    iter: values.into_iter(),
-                }),
+                Ok(Value::Array(values)) if values.is_empty() => Value::Array(values)
+                    .deserialize_seq(visitor)
+                    .map_err(json_err),
                 Ok(Value::Array(values)) => visitor.visit_seq(EitherSeq::Undecided {
                     bytes: text.into_bytes(),
                     values,
@@ -514,13 +538,30 @@ impl<'de> Deserializer<'de> for SectionDeserializer {
             }
             .parsed()?
             .deserialize_enum(name, variants, visitor)
-            .map_err(into_body),
+            .map_err(|err| into_body(json_err(err))),
         }
     }
 
+    /// A char is the raw section text, like a string: `#` or `-` alone must
+    /// not be read as YAML.
+    fn deserialize_char<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
+        self.deserialize_string(visitor)
+    }
+
+    /// A newtype is its content: the section is handed on as it is, so a
+    /// newtype around a string is raw text and one around a struct or a
+    /// number is the fence language.
+    fn deserialize_newtype_struct<V: Visitor<'de>>(
+        self,
+        _name: &'static str,
+        visitor: V,
+    ) -> Result<V::Value, Error> {
+        visitor.visit_newtype_struct(self)
+    }
+
     serde::forward_to_deserialize_any! {
-        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char unit unit_struct
-        tuple tuple_struct map struct newtype_struct identifier
+        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 unit unit_struct
+        tuple tuple_struct map struct identifier
     }
 }
 
@@ -548,12 +589,13 @@ impl<'de> SeqAccess<'de> for EitherSeq {
         match self {
             EitherSeq::Bytes(iter) => match iter.next() {
                 Some(b) => seed
-                    .deserialize(JsonDe(Value::Number(u64::from(b).into())))
-                    .map(Some),
+                    .deserialize(Value::Number(u64::from(b).into()))
+                    .map(Some)
+                    .map_err(json_err),
                 None => Ok(None),
             },
             EitherSeq::Values(iter) => match iter.next() {
-                Some(value) => seed.deserialize(JsonDe(value)).map(Some),
+                Some(value) => seed.deserialize(value).map(Some).map_err(json_err),
                 None => Ok(None),
             },
             EitherSeq::Undecided { bytes, values } => {
@@ -592,7 +634,7 @@ macro_rules! first_element_reads_values {
         $(
             fn $method<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
                 *self.choice = Choice::Values;
-                JsonDe(self.value).$method(visitor)
+                self.value.$method(visitor).map_err(json_err)
             }
         )*
     };
@@ -621,7 +663,9 @@ impl<'de> Deserializer<'de> for FirstElement<'_> {
         visitor: V,
     ) -> Result<V::Value, Error> {
         *self.choice = Choice::Values;
-        JsonDe(self.value).deserialize_unit_struct(name, visitor)
+        self.value
+            .deserialize_unit_struct(name, visitor)
+            .map_err(json_err)
     }
 
     fn deserialize_newtype_struct<V: Visitor<'de>>(
@@ -630,12 +674,14 @@ impl<'de> Deserializer<'de> for FirstElement<'_> {
         visitor: V,
     ) -> Result<V::Value, Error> {
         *self.choice = Choice::Values;
-        JsonDe(self.value).deserialize_newtype_struct(name, visitor)
+        self.value
+            .deserialize_newtype_struct(name, visitor)
+            .map_err(json_err)
     }
 
     fn deserialize_tuple<V: Visitor<'de>>(self, len: usize, visitor: V) -> Result<V::Value, Error> {
         *self.choice = Choice::Values;
-        JsonDe(self.value).deserialize_tuple(len, visitor)
+        self.value.deserialize_tuple(len, visitor).map_err(json_err)
     }
 
     fn deserialize_tuple_struct<V: Visitor<'de>>(
@@ -645,7 +691,9 @@ impl<'de> Deserializer<'de> for FirstElement<'_> {
         visitor: V,
     ) -> Result<V::Value, Error> {
         *self.choice = Choice::Values;
-        JsonDe(self.value).deserialize_tuple_struct(name, len, visitor)
+        self.value
+            .deserialize_tuple_struct(name, len, visitor)
+            .map_err(json_err)
     }
 
     fn deserialize_struct<V: Visitor<'de>>(
@@ -655,7 +703,9 @@ impl<'de> Deserializer<'de> for FirstElement<'_> {
         visitor: V,
     ) -> Result<V::Value, Error> {
         *self.choice = Choice::Values;
-        JsonDe(self.value).deserialize_struct(name, fields, visitor)
+        self.value
+            .deserialize_struct(name, fields, visitor)
+            .map_err(json_err)
     }
 
     fn deserialize_enum<V: Visitor<'de>>(
@@ -665,7 +715,9 @@ impl<'de> Deserializer<'de> for FirstElement<'_> {
         visitor: V,
     ) -> Result<V::Value, Error> {
         *self.choice = Choice::Values;
-        JsonDe(self.value).deserialize_enum(name, variants, visitor)
+        self.value
+            .deserialize_enum(name, variants, visitor)
+            .map_err(json_err)
     }
 }
 
@@ -682,229 +734,18 @@ impl<'de> SeqAccess<'de> for ByteSeq {
     {
         match self.iter.next() {
             Some(b) => seed
-                .deserialize(JsonDe(Value::Number(u64::from(b).into())))
-                .map(Some),
+                .deserialize(Value::Number(u64::from(b).into()))
+                .map(Some)
+                .map_err(json_err),
             None => Ok(None),
         }
     }
 }
 
-struct JsonDe(Value);
-
-fn visit_number<'de, V: Visitor<'de>>(
-    n: serde_json::Number,
-    visitor: V,
-) -> Result<V::Value, Error> {
-    if let Some(i) = n.as_i64() {
-        visitor.visit_i64(i)
-    } else if let Some(u) = n.as_u64() {
-        visitor.visit_u64(u)
-    } else if let Some(f) = n.as_f64() {
-        visitor.visit_f64(f)
-    } else {
-        Err(Error::type_error(format!("invalid number: {n}")))
-    }
-}
-
-impl<'de> Deserializer<'de> for JsonDe {
-    type Error = Error;
-
-    fn deserialize_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            Value::Null => visitor.visit_unit(),
-            Value::Bool(b) => visitor.visit_bool(b),
-            Value::Number(n) => visit_number(n, visitor),
-            Value::String(s) => visitor.visit_string(s),
-            Value::Array(arr) => visitor.visit_seq(JsonSeq {
-                iter: arr.into_iter(),
-            }),
-            Value::Object(map) => visitor.visit_map(JsonMap {
-                iter: map.into_iter(),
-                next_value: None,
-            }),
-        }
-    }
-
-    fn deserialize_option<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            Value::Null => visitor.visit_none(),
-            _ => visitor.visit_some(self),
-        }
-    }
-
-    fn deserialize_ignored_any<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        visitor.visit_unit()
-    }
-
-    fn deserialize_unit<V: Visitor<'de>>(self, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            Value::Null => visitor.visit_unit(),
-            other => JsonDe(other).deserialize_any(visitor),
-        }
-    }
-
-    fn deserialize_newtype_struct<V: Visitor<'de>>(
-        self,
-        _name: &'static str,
-        visitor: V,
-    ) -> Result<V::Value, Error> {
-        visitor.visit_newtype_struct(self)
-    }
-
-    /// An enum value is its variant name, or a map from the variant name to
-    /// its content: the forms JSON and TOML write, and YAML tags become.
-    fn deserialize_enum<V: Visitor<'de>>(
-        self,
-        _name: &'static str,
-        _variants: &'static [&'static str],
-        visitor: V,
-    ) -> Result<V::Value, Error> {
-        match self.0 {
-            Value::String(variant) => visitor.visit_enum(JsonEnum {
-                variant,
-                content: None,
-            }),
-            Value::Object(map) => {
-                let mut entries = map.into_iter();
-                match (entries.next(), entries.next()) {
-                    (Some((variant, content)), None) => visitor.visit_enum(JsonEnum {
-                        variant,
-                        content: Some(content),
-                    }),
-                    _ => Err(not_an_enum()),
-                }
-            }
-            _ => Err(not_an_enum()),
-        }
-    }
-
-    serde::forward_to_deserialize_any! {
-        bool i8 i16 i32 i64 i128 u8 u16 u32 u64 u128 f32 f64 char str string
-        bytes byte_buf unit_struct seq tuple tuple_struct map struct
-        identifier
-    }
-}
-
-fn not_an_enum() -> Error {
-    Error::type_error("an enum value must be a variant name or a map with a single key")
-}
-
-/// An enum variant and its content, if it has one.
-struct JsonEnum {
-    variant: String,
-    content: Option<Value>,
-}
-
-impl<'de> EnumAccess<'de> for JsonEnum {
-    type Error = Error;
-    type Variant = JsonVariant;
-
-    fn variant_seed<S>(self, seed: S) -> Result<(S::Value, JsonVariant), Error>
-    where
-        S: DeserializeSeed<'de>,
-    {
-        let variant = seed.deserialize(StringDeserializer::<Error>::new(self.variant))?;
-        Ok((variant, JsonVariant(self.content)))
-    }
-}
-
-/// The content of an enum variant.
-struct JsonVariant(Option<Value>);
-
-impl<'de> VariantAccess<'de> for JsonVariant {
-    type Error = Error;
-
-    fn unit_variant(self) -> Result<(), Error> {
-        match self.0 {
-            None | Some(Value::Null) => Ok(()),
-            Some(_) => Err(Error::type_error("expected a unit variant")),
-        }
-    }
-
-    fn newtype_variant_seed<S>(self, seed: S) -> Result<S::Value, Error>
-    where
-        S: DeserializeSeed<'de>,
-    {
-        match self.0 {
-            Some(content) => seed.deserialize(JsonDe(content)),
-            None => Err(Error::type_error("expected a newtype variant")),
-        }
-    }
-
-    fn tuple_variant<V: Visitor<'de>>(self, _len: usize, visitor: V) -> Result<V::Value, Error> {
-        match self.0 {
-            Some(Value::Array(values)) => visitor.visit_seq(JsonSeq {
-                iter: values.into_iter(),
-            }),
-            _ => Err(Error::type_error("expected a tuple variant")),
-        }
-    }
-
-    fn struct_variant<V: Visitor<'de>>(
-        self,
-        _fields: &'static [&'static str],
-        visitor: V,
-    ) -> Result<V::Value, Error> {
-        match self.0 {
-            Some(Value::Object(map)) => visitor.visit_map(JsonMap {
-                iter: map.into_iter(),
-                next_value: None,
-            }),
-            _ => Err(Error::type_error("expected a struct variant")),
-        }
-    }
-}
-
-struct JsonSeq {
-    iter: vec::IntoIter<Value>,
-}
-
-impl<'de> SeqAccess<'de> for JsonSeq {
-    type Error = Error;
-
-    fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>, Error>
-    where
-        T: DeserializeSeed<'de>,
-    {
-        match self.iter.next() {
-            Some(value) => seed.deserialize(JsonDe(value)).map(Some),
-            None => Ok(None),
-        }
-    }
-}
-
-struct JsonMap {
-    iter: <Map<String, Value> as IntoIterator>::IntoIter,
-    next_value: Option<Value>,
-}
-
-impl<'de> MapAccess<'de> for JsonMap {
-    type Error = Error;
-
-    fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>, Error>
-    where
-        K: DeserializeSeed<'de>,
-    {
-        match self.iter.next() {
-            Some((key, value)) => {
-                self.next_value = Some(value);
-                seed.deserialize(StringDeserializer::<Error>::new(key))
-                    .map(Some)
-            }
-            None => Ok(None),
-        }
-    }
-
-    fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value, Error>
-    where
-        V: DeserializeSeed<'de>,
-    {
-        let value = self
-            .next_value
-            .take()
-            .ok_or_else(|| Error::type_error("value is missing"))?;
-        seed.deserialize(JsonDe(value))
-    }
+/// A `serde_json` failure while a decoded value is read into the caller's
+/// type, as a mapping-layer type error.
+fn json_err(err: serde_json::Error) -> Error {
+    Error::type_error(err)
 }
 
 #[cfg(test)]

@@ -287,3 +287,96 @@ rust_test(
         "@serde_markdown_cargo//:serde_json",
     ],
 )
+
+# Same sources with only the `tokio` feature, so the optional module builds
+# and its tests run without any fence language.
+rust_library(
+    name = "serde_markdown_tokio_only",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = glob(
+        ["testdata/markdown/**/*.md"],
+        allow_empty = True,
+    ),
+    crate_features = [
+        "tokio",
+    ],
+    crate_name = "serde_markdown",
+    visibility = ["//rust:__pkg__"],
+    deps = [
+        "@serde_markdown_cargo//:pulldown-cmark",
+        "@serde_markdown_cargo//:serde",
+        "@serde_markdown_cargo//:serde_json",
+        "@serde_markdown_cargo//:tokio",
+    ],
+)
+
+rust_test(
+    name = "serde_markdown_tokio_only_test",
+    size = "small",
+    compile_data = glob(
+        ["testdata/markdown/**/*.md"],
+        allow_empty = True,
+    ),
+    crate = ":serde_markdown_tokio_only",
+    crate_features = [
+        "tokio",
+    ],
+    proc_macro_deps = [
+        "//rust/markdown_derive:serde_markdown_derive",
+    ],
+    visibility = ["//rust:__pkg__"],
+    deps = [
+        "//rust/proto",
+        "@serde_markdown_cargo//:buffa",
+        "@serde_markdown_cargo//:buffa-types",
+        "@serde_markdown_cargo//:serde_json",
+    ],
+)
+
+# Same sources with only the `buffa` feature, so the optional module builds
+# and its tests run without any fence language.
+rust_library(
+    name = "serde_markdown_buffa_only",
+    srcs = glob(["src/**/*.rs"]),
+    compile_data = glob(
+        ["testdata/markdown/**/*.md"],
+        allow_empty = True,
+    ),
+    crate_features = [
+        "buffa",
+    ],
+    crate_name = "serde_markdown",
+    visibility = ["//rust:__pkg__"],
+    deps = [
+        "@serde_markdown_cargo//:buffa",
+        "@serde_markdown_cargo//:buffa-descriptor",
+        "@serde_markdown_cargo//:buffa-types",
+        "@serde_markdown_cargo//:pulldown-cmark",
+        "@serde_markdown_cargo//:serde",
+        "@serde_markdown_cargo//:serde_json",
+    ],
+)
+
+rust_test(
+    name = "serde_markdown_buffa_only_test",
+    size = "small",
+    compile_data = glob(
+        ["testdata/markdown/**/*.md"],
+        allow_empty = True,
+    ),
+    crate = ":serde_markdown_buffa_only",
+    crate_features = [
+        "buffa",
+    ],
+    proc_macro_deps = [
+        "//rust/markdown_derive:serde_markdown_derive",
+    ],
+    visibility = ["//rust:__pkg__"],
+    deps = [
+        "//rust/proto",
+        "@serde_markdown_cargo//:buffa",
+        "@serde_markdown_cargo//:buffa-descriptor",
+        "@serde_markdown_cargo//:buffa-types",
+        "@serde_markdown_cargo//:serde_json",
+    ],
+)

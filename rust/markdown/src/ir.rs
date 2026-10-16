@@ -68,8 +68,17 @@ impl<'de> Visitor<'de> for IrVisitor {
         }
     }
 
+    /// A number that is not finite (`.inf`, `-.inf`, `.nan` in YAML, `inf`
+    /// and `nan` in TOML) has no JSON form to carry it in, and turning it
+    /// into `null` would read back as an absent value: it is an error.
     fn visit_f64<E: de::Error>(self, x: f64) -> Result<Value, E> {
-        Ok(Number::from_f64(x).map_or(Value::Null, Value::Number))
+        match Number::from_f64(x) {
+            Some(number) => Ok(Value::Number(number)),
+            None => Err(E::custom(format!(
+                "the number {x} is not finite, which a fields block or a structured \
+                 section cannot hold"
+            ))),
+        }
     }
 
     fn visit_str<E: de::Error>(self, s: &str) -> Result<Value, E> {
@@ -150,6 +159,15 @@ mod tests {
             value,
             serde_json::json!({"a": {"Moved": 3}, "b": {"Point": {"x": 1}}, "c": "Plain"})
         );
+    }
+
+    #[cfg(feature = "yaml")]
+    #[test]
+    fn a_non_finite_number_is_a_decoder_error() {
+        for text in ["x: .inf", "x: -.inf", "x: .nan"] {
+            let err = yaml_serde::from_str::<Ir>(text).err().expect(text);
+            assert!(err.to_string().contains("not finite"), "{err}");
+        }
     }
 
     #[cfg(feature = "toml")]
