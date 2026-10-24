@@ -1,7 +1,7 @@
 """Buf CLI and prebuilt protoc-gen plugins for hermetic generate, lint, and format."""
 
 buf = use_extension("@bazel_utils_buf//:extensions.bzl", "buf")
-buf.toolchains(version = "v1.74.0")
+buf.toolchains(version = "v1.75.0")
 use_repo(buf, "buf")
 
 protoc = use_extension("@bazel_utils_protoc//:extensions.bzl", "protoc")
