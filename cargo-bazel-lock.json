@@ -1,5 +1,5 @@
 {
-  "checksum": "abb235f5f4a24bba9b1cd0c62ac9e5aa68b24eb46e98489dec98e7ffc29a19b5",
+  "checksum": "b15f5c81a66321ccb84030ca709842bce73330343979a223eb5878a6ba9ebb7b",
   "conditions": {
     "aarch64-apple-darwin": [
       "aarch64-apple-darwin"
@@ -2405,7 +2405,7 @@
             "target": "tokio"
           },
           {
-            "id": "toml 1.1.8+spec-1.1.0",
+            "id": "toml 1.2.3+spec-1.1.0",
             "target": "toml"
           },
           {
@@ -2509,7 +2509,7 @@
       ],
       "version": "0.5.1"
     },
-    "serde_spanned 1.1.2": {
+    "serde_spanned 1.1.3": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -2535,8 +2535,8 @@
       "package_url": "https://github.com/toml-rs/toml",
       "repository": {
         "Http": {
-          "sha256": "4e7523beb55eece201a2356bee0bbca0d1ab466c14c07703b2e0ee6d42cb0c2c",
-          "url": "https://static.crates.io/crates/serde_spanned/1.1.2/download"
+          "sha256": "9c187e0a369471c550af028cba56d4f4fa2a489ad28151ae95a4d340a2a8b782",
+          "url": "https://static.crates.io/crates/serde_spanned/1.1.3/download"
         }
       },
       "targets": [
@@ -2547,7 +2547,7 @@
           }
         }
       ],
-      "version": "1.1.2"
+      "version": "1.1.3"
     },
     "simdutf8 0.1.5": {
       "common_attrs": {
@@ -2922,7 +2922,7 @@
       ],
       "version": "1.53.3"
     },
-    "toml 1.1.8+spec-1.1.0": {
+    "toml 1.2.3+spec-1.1.0": {
       "common_attrs": {
         "crate_features": [
           "default",
@@ -2937,19 +2937,19 @@
             "target": "serde_core"
           },
           {
-            "id": "serde_spanned 1.1.2",
+            "id": "serde_spanned 1.1.3",
             "target": "serde_spanned"
           },
           {
-            "id": "toml_datetime 1.1.2+spec-1.1.0",
+            "id": "toml_datetime 1.1.3+spec-1.1.0",
             "target": "toml_datetime"
           },
           {
-            "id": "toml_parser 1.1.5+spec-1.1.0",
+            "id": "toml_parser 1.1.7+spec-1.1.0",
             "target": "toml_parser"
           },
           {
-            "id": "toml_writer 1.1.3+spec-1.1.0",
+            "id": "toml_writer 1.2.0+spec-1.1.0",
             "target": "toml_writer"
           },
           {
@@ -2970,8 +2970,8 @@
       "package_url": "https://github.com/toml-rs/toml",
       "repository": {
         "Http": {
-          "sha256": "20489e00e4d8741d6be680764cc12e270655e375a20d1011e844a9c3379e678d",
-          "url": "https://static.crates.io/crates/toml/1.1.8+spec-1.1.0/download"
+          "sha256": "26b1f26e9485c1fa43ee89fe76e9f3fb9e2e52bb227f8594b4d687496b83d073",
+          "url": "https://static.crates.io/crates/toml/1.2.3+spec-1.1.0/download"
         }
       },
       "targets": [
@@ -2982,9 +2982,9 @@
           }
         }
       ],
-      "version": "1.1.8+spec-1.1.0"
+      "version": "1.2.3+spec-1.1.0"
     },
-    "toml_datetime 1.1.2+spec-1.1.0": {
+    "toml_datetime 1.1.3+spec-1.1.0": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -3010,8 +3010,8 @@
       "package_url": "https://github.com/toml-rs/toml",
       "repository": {
         "Http": {
-          "sha256": "2b86d767906c6c42421dcba507eb9d203e779497710a47782a224bb871653053",
-          "url": "https://static.crates.io/crates/toml_datetime/1.1.2+spec-1.1.0/download"
+          "sha256": "173f25c883cd2176a2d8212155638c0a60d484a9d84546d270866f40f56b6e49",
+          "url": "https://static.crates.io/crates/toml_datetime/1.1.3+spec-1.1.0/download"
         }
       },
       "targets": [
@@ -3022,9 +3022,9 @@
           }
         }
       ],
-      "version": "1.1.2+spec-1.1.0"
+      "version": "1.1.3+spec-1.1.0"
     },
-    "toml_parser 1.1.5+spec-1.1.0": {
+    "toml_parser 1.1.7+spec-1.1.0": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -3049,8 +3049,8 @@
       "package_url": "https://github.com/toml-rs/toml",
       "repository": {
         "Http": {
-          "sha256": "baa693a8032d7e1cada7d0041e96126df243179ff061456783ac7f12bda4744c",
-          "url": "https://static.crates.io/crates/toml_parser/1.1.5+spec-1.1.0/download"
+          "sha256": "0bb28d6e049a9766c3bd91a8326e6179f5b132dec87906bb97018ef7a2f3431a",
+          "url": "https://static.crates.io/crates/toml_parser/1.1.7+spec-1.1.0/download"
         }
       },
       "targets": [
@@ -3061,9 +3061,9 @@
           }
         }
       ],
-      "version": "1.1.5+spec-1.1.0"
+      "version": "1.1.7+spec-1.1.0"
     },
-    "toml_writer 1.1.3+spec-1.1.0": {
+    "toml_writer 1.2.0+spec-1.1.0": {
       "common_attrs": {
         "crate_features": [
           "alloc",
@@ -3082,8 +3082,8 @@
       "package_url": "https://github.com/toml-rs/toml",
       "repository": {
         "Http": {
-          "sha256": "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770",
-          "url": "https://static.crates.io/crates/toml_writer/1.1.3+spec-1.1.0/download"
+          "sha256": "009dbb7700f11c55ef83aebbe4c0e9cf1f1ac0844bd8d6f00dc38f302026e13a",
+          "url": "https://static.crates.io/crates/toml_writer/1.2.0+spec-1.1.0/download"
         }
       },
       "targets": [
@@ -3094,7 +3094,7 @@
           }
         }
       ],
-      "version": "1.1.3+spec-1.1.0"
+      "version": "1.2.0+spec-1.1.0"
     },
     "unicase 2.10.0": {
       "common_attrs": {
@@ -3393,7 +3393,7 @@
     "serde_json 1.0.154",
     "syn 3.0.9",
     "tokio 1.53.3",
-    "toml 1.1.8+spec-1.1.0",
+    "toml 1.2.3+spec-1.1.0",
     "yaml_serde 0.10.7"
   ],
   "direct_dev_deps": [],
